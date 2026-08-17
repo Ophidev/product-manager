@@ -14,6 +14,7 @@ export const loader = async ({ request }) => {
               id
               title
               status
+              totalInventory
             }
           }
         }
@@ -35,7 +36,7 @@ export default function ProductsPage() {
     <s-page heading="Products">
       <s-section heading="Product List">
         <s-paragraph>
-          A simple list of products fetched from your store.
+          A simple list of products fetched from your store using GraphQL.
         </s-paragraph>
         
         <s-stack direction="block" gap="base">
@@ -50,6 +51,9 @@ export default function ProductsPage() {
               <s-heading>{product.title}</s-heading>
               <s-paragraph>
                 <strong>Status:</strong> {product.status}
+              </s-paragraph>
+              <s-paragraph>
+                <strong>Inventory:</strong> {product.totalInventory}
               </s-paragraph>
               <s-paragraph>
                 <strong>ID:</strong> {product.id.split('/').pop()}
