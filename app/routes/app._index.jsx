@@ -11,12 +11,13 @@ export const loader = async ({ request }) => {
 };
 
 export const action = async ({ request }) => {
-  const { admin } = await authenticate.admin(request);
-  const color = ["Red", "Orange", "Yellow", "Green"][
-    Math.floor(Math.random() * 4)
-  ];
-  const response = await admin.graphql(
-    `#graphql
+  try {
+    const { admin } = await authenticate.admin(request);
+    const color = ["Red", "Orange", "Yellow", "Green"][
+      Math.floor(Math.random() * 4)
+    ];
+    const response = await admin.graphql(
+      `#graphql
       mutation populateProduct($product: ProductCreateInput!) {
         productCreate(product: $product) {
           product {
@@ -38,28 +39,57 @@ export const action = async ({ request }) => {
               jsonValue
             }
           }
+          userErrors {
+            field
+            message
+          }
         }
       }`,
-    {
-      variables: {
-        product: {
-          title: `${color} Snowboard`,
-          metafields: [
-            {
-              namespace: "$app",
-              key: "demo_info",
-              value: "Created by React Router Template",
-            },
-          ],
+      {
+        variables: {
+          product: {
+            title: `${color} Snowboard`,
+            productType: "Snowboard",
+            metafields: [
+              {
+                namespace: "$app",
+                key: "demo_info",
+                type: "single_line_text_field",
+                value: "Created by React Router Template",
+              },
+            ],
+          },
         },
       },
-    },
-  );
-  const responseJson = await response.json();
-  const product = responseJson.data.productCreate.product;
-  const variantId = product.variants.edges[0].node.id;
-  const variantResponse = await admin.graphql(
-    `#graphql
+    );
+    const responseJson = await response.json();
+    const product = responseJson?.data?.productCreate?.product ?? null;
+    const productErrors =
+      responseJson?.data?.productCreate?.userErrors ?? responseJson?.errors ?? [];
+
+    if (!product) {
+      return {
+        product: null,
+        variant: null,
+        metaobject: null,
+        error: productErrors[0]?.message ?? "Product creation failed.",
+      };
+    }
+
+    if (!product?.variants?.edges?.length) {
+      return {
+        product,
+        variant: null,
+        metaobject: null,
+        error:
+          productErrors[0]?.message ??
+          "Product was created, but Shopify did not return a variant.",
+      };
+    }
+
+    const variantId = product.variants.edges[0].node.id;
+    const variantResponse = await admin.graphql(
+      `#graphql
     mutation shopifyReactRouterTemplateUpdateVariant($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
       productVariantsBulkUpdate(productId: $productId, variants: $variants) {
         productVariants {
@@ -70,16 +100,20 @@ export const action = async ({ request }) => {
         }
       }
     }`,
-    {
-      variables: {
-        productId: product.id,
-        variants: [{ id: variantId, price: "100.00" }],
+      {
+        variables: {
+          productId: product.id,
+          variants: [{ id: variantId, price: "100.00" }],
+        },
       },
-    },
-  );
-  const variantResponseJson = await variantResponse.json();
-  const metaobjectResponse = await admin.graphql(
-    `#graphql
+    );
+    const variantResponseJson = await variantResponse.json();
+    const variantErrors =
+      variantResponseJson?.data?.productVariantsBulkUpdate?.userErrors ??
+      variantResponseJson?.errors ??
+      [];
+    const metaobjectResponse = await admin.graphql(
+      `#graphql
     mutation shopifyReactRouterTemplateUpsertMetaobject($handle: MetaobjectHandleInput!, $values: JSON!) {
       metaobjectUpsert(handle: $handle, values: $values) {
         metaobject {
@@ -93,27 +127,46 @@ export const action = async ({ request }) => {
         }
       }
     }`,
-    {
-      variables: {
-        handle: {
-          type: "$app:example",
-          handle: "demo-entry",
-        },
-        values: {
-          title: "Demo Entry",
-          description:
-            "This metaobject was created by the Shopify app template to demonstrate the metaobject API.",
+      {
+        variables: {
+          handle: {
+            type: "$app:example",
+            handle: "demo-entry",
+          },
+          values: {
+            title: "Demo Entry",
+            description:
+              "This metaobject was created by the Shopify app template to demonstrate the metaobject API.",
+          },
         },
       },
-    },
-  );
-  const metaobjectResponseJson = await metaobjectResponse.json();
+    );
+    const metaobjectResponseJson = await metaobjectResponse.json();
+    const metaobjectErrors =
+      metaobjectResponseJson?.data?.metaobjectUpsert?.userErrors ??
+      metaobjectResponseJson?.errors ??
+      [];
 
-  return {
-    product: responseJson.data.productCreate.product,
-    variant: variantResponseJson.data.productVariantsBulkUpdate.productVariants,
-    metaobject: metaobjectResponseJson.data.metaobjectUpsert.metaobject,
-  };
+    return {
+      product,
+      variant:
+        variantResponseJson?.data?.productVariantsBulkUpdate?.productVariants ??
+        null,
+      metaobject:
+        metaobjectResponseJson?.data?.metaobjectUpsert?.metaobject ?? null,
+      error:
+        variantErrors[0]?.message ??
+        metaobjectErrors[0]?.message ??
+        null,
+    };
+  } catch (error) {
+    return {
+      product: null,
+      variant: null,
+      metaobject: null,
+      error: error instanceof Error ? error.message : "Product creation failed.",
+    };
+  }
 };
 
 export default function Index() {
@@ -136,7 +189,7 @@ export default function Index() {
         Generate a product
       </s-button>
 
-      <s-section heading="Congrats on creating a new Shopify app 🎉">
+      <s-section heading="Congrats on creating a new Shopify app Test🎉">
         <s-paragraph>
           This embedded app template uses{" "}
           <s-link
@@ -204,6 +257,9 @@ export default function Index() {
             </s-button>
           )}
         </s-stack>
+        {fetcher.data?.error && (
+          <s-banner tone="critical">{fetcher.data.error}</s-banner>
+        )}
         {fetcher.data?.product && (
           <s-section heading="productCreate mutation">
             <s-stack direction="block" gap="base">
