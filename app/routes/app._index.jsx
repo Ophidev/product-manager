@@ -9,7 +9,7 @@ const STAT_FILTERS = {
     outOfStock: "inventory_total:0",
     lowInventory: "inventory_total:<=5",
 };
-
+//allow to read the Home bar data
 export const loader = async ({ request }) => {
     const { admin } = await authenticate.admin(request);
 
@@ -22,7 +22,7 @@ export const loader = async ({ request }) => {
             lowInventory: productsCount(query: "inventory_total:<=5") { count }
         }
     `);
-
+//regarding the recently products Updated
     const recentResponse = await admin.graphql(`
         query RecentProducts($first: Int!) {
             products(first: $first, sortKey: UPDATED_AT, reverse: true) {
@@ -37,17 +37,17 @@ export const loader = async ({ request }) => {
             }
         }
     `, { variables: { first: 5 } });
-
+//provide the data in JSON format
     const stats = (await statsResponse.json()).data;
     const recent = (await recentResponse.json()).data;
 
     return { stats, recentProducts: recent.products.nodes };
 };
 
-// eslint-disable-next-line react/prop-types
+//allow to click the stats and show to the USER in filter manner directs them to the /products
 function StatTile({ label, value, filter, tone }) {
     const href = filter ? `/app/products?filter=${filter}` : "/app/products";
-
+//ui presentation 
     return (
         <s-clickable href={href} padding="base" background="subdued" borderRadius="base">
             <s-stack direction="block" gap="small-200">
@@ -59,10 +59,10 @@ function StatTile({ label, value, filter, tone }) {
         </s-clickable>
     );
 }
-
+//allows to share the product which is fetched by Loader 
 export default function Dashboard() {
     const { stats, recentProducts } = useLoaderData();
-
+// UI section 
     return (
         <s-page heading="Dashboard">
             <s-section heading="Catalog overview">
@@ -93,9 +93,7 @@ export default function Dashboard() {
                                 <s-table-row key={product.id}>
                                     <s-table-cell>
                                         <s-stack direction="inline" gap="small" alignItems="center">
-                                            <s-clickable
-                                                href={`shopify://admin/products/${product.id.split("/").pop()}`}
-                                                accessibilityLabel={`${product.title} thumbnail`}
+                                            <s-box
                                                 border="base"
                                                 borderRadius="base"
                                                 overflow="hidden"
@@ -109,10 +107,8 @@ export default function Dashboard() {
                                                         alt={product.featuredImage.altText || product.title}
                                                     />
                                                 ) : null}
-                                            </s-clickable>
-                                            <s-link href={`shopify://admin/products/${product.id.split("/").pop()}`}>
-                                                {product.title}
-                                            </s-link>
+                                            </s-box>
+                                            <s-text>{product.title}</s-text>
                                         </s-stack>
                                     </s-table-cell>
                                     <s-table-cell>{product.totalInventory ?? 0}</s-table-cell>
