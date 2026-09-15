@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { authenticate } from "../shopify.server";
 //loader-- to get the data from the admin
 export const loader = async ({ request }) => {
+    console.log("Loader : fetched the data")
     const { admin } = await authenticate.admin(request);
 
     const response = await admin.graphql(`
@@ -54,10 +55,11 @@ export const loader = async ({ request }) => {
 };
 //action --write/update 
 export const action = async ({ request }) => {
+    console.log("Action: DiscountPage");
     const { admin } = await authenticate.admin(request);
     const formData = await request.formData();
     const ids = JSON.parse(formData.get("ids") || "[]");
-
+//applying delete button to all the row workable with mutation 
     const results = await Promise.all(
         ids.map(async (id) => {
             const response = await admin.graphql(`
@@ -81,14 +83,15 @@ export default function Discounts() {
     const { discounts } = useLoaderData();
     const deleteFetcher = useFetcher();
     const deleteResult = deleteFetcher.data;
-
     const [search, setSearch] = useState("");
     const [pendingDeleteIds, setPendingDeleteIds] = useState([]);
 
     const filteredDiscounts = discounts.filter((discount) =>
         discount.code.toLowerCase().includes(search.toLowerCase()),
     );
-
+//fetcher.data allow to the data returned from the action or loader
+//fetcher.state // "idle" | "loading" | "submitting" defines the state 
+//delete button to fetch working for the modal
     useEffect(() => {
         if (deleteFetcher.state === "idle" && deleteResult && !deleteResult.userErrors?.length) {
             setPendingDeleteIds([]);
@@ -104,11 +107,16 @@ export default function Discounts() {
     const handleDelete = () => {
         deleteFetcher.submit({ ids: JSON.stringify(pendingDeleteIds) }, { method: "post" });
     };
+//discount copy code 
+    const copyCode = async (code) => {
+        await navigator.clipboard.writeText(code);
+        shopify.toast.show("Discount code copied");
+    };
 
     return (
         <s-page heading="Discounts">
             <s-button slot="primary-action" href="/app/discounts/new">
-                Create discount
+                Create Discount
             </s-button>
 
             {deleteResult?.userErrors?.length > 0 && (
@@ -152,7 +160,7 @@ export default function Discounts() {
                         />
                     </s-grid>
                     <s-table-header-row>
-                        <s-table-header listSlot="primary">Code</s-table-header>
+                        <s-table-header listSlot="primary">Discount Code</s-table-header>
                         <s-table-header format="numeric">Percentage off</s-table-header>
                         <s-table-header>Applies to</s-table-header>
                         <s-table-header>Eligibility</s-table-header>
@@ -167,8 +175,18 @@ export default function Discounts() {
                             return (
                                 <s-table-row key={discount.id}>
                                     <s-table-cell>
-                                        <s-grid gridTemplateColumns="1fr auto" gap="small" alignItems="center">
+                                        <s-grid gridTemplateColumns="1fr auto auto" gap="small" alignItems="center">
                                             <s-text>{discount.code}</s-text>
+                                            <s-button
+                                                icon="clipboard"
+                                                variant="tertiary"
+                                                accessibilityLabel={`Copy ${discount.code}`}
+                                                interestFor={`copy-tooltip-${discountNumericId}`}
+                                                onClick={() => copyCode(discount.code)}
+                                            />
+                                            <s-tooltip id={`copy-tooltip-${discountNumericId}`}>
+                                                <s-text>Copy code</s-text>
+                                            </s-tooltip>
                                             <s-button
                                                 icon="edit"
                                                 variant="tertiary"
@@ -177,7 +195,7 @@ export default function Discounts() {
                                                 interestFor={`edit-tooltip-${discountNumericId}`}
                                             />
                                             <s-tooltip id={`edit-tooltip-${discountNumericId}`}>
-                                                <s-text>Edit</s-text>
+                                                <s-text>Update Discount</s-text>
                                             </s-tooltip>
                                         </s-grid>
                                     </s-table-cell>
@@ -202,7 +220,7 @@ export default function Discounts() {
                                                 icon="delete"
                                                 onClick={() => confirmDelete([discount.id])}
                                             >
-                                                Delete discount
+                                                Delete Discount
                                             </s-button>
                                         </s-menu>
                                     </s-table-cell>

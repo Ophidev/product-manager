@@ -115,7 +115,7 @@ export const action = async ({ request, params }) => {
     } catch {
         collectionIds = null;
     }
-//colelction error
+//colelction error if no collection is selected 
     if (
         !Array.isArray(collectionIds) ||
         collectionIds.length === 0 ||
@@ -164,7 +164,7 @@ export const action = async ({ request, params }) => {
     } catch {
         initialCollectionIds = [];
     }
-// initial it has now it don't or it has have to add more 
+// initial it has now it don't or it has have to add more  for the edit ones
     const initialIds = new Set(initialCollectionIds);
     const currentIds = new Set(collectionIds);
     const toAdd = collectionIds.filter((id) => !initialIds.has(id));
@@ -224,7 +224,7 @@ export default function DiscountForm() {
     const searchResults = (searchFetcher.data?.collections ?? collections ?? []).filter(
         (collection) => !selectedCollections.some((selected) => selected.id === collection.id),
     );
-
+//used for the searching the colleciton with the 300ms 
     useEffect(() => {
         const term = searchTerm.trim();
         if (!term) return;
@@ -244,7 +244,7 @@ export default function DiscountForm() {
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [result, isSaving]);
-
+//add more collection 
     const addCollection = (collection) => {
         setSelectedCollections((current) => {
             if (current.some((selected) => selected.id === collection.id)) return current;
@@ -252,18 +252,18 @@ export default function DiscountForm() {
         });
         setSearchTerm("");
     };
-
+//remove collection
     const removeCollection = (collectionId) => {
         setSelectedCollections((current) => current.filter((collection) => collection.id !== collectionId));
     };
-
+//handle colleciton delete
     const handleDiscard = () => {
         setCode(initial.code);
         setPercentage(initial.percentage);
         setSearchTerm("");
         setSelectedCollections(initial.collections);
     };
-
+//handle submit with the help of handleSubmit 
     const handleSubmit = (event) => {
         event.preventDefault();
 
