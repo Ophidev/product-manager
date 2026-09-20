@@ -1,5 +1,5 @@
 import { useLoaderData, useNavigate, useFetcher, useSearchParams } from "react-router";
-import { useEffect, useCallback, useState } from "react";
+import { useEffect, useCallback, useState, useRef } from "react";
 import { authenticate } from "../shopify.server";
 //allows to sort the customer by name and created at
 const SORT_KEYS = {
@@ -35,6 +35,70 @@ function csvEscape(value) {
         return `"${text.replace(/"/g, '""')}"`;
     }
     return text;
+}
+
+// header row used by both the sample CSV and the parser below 
+const IMPORT_HEADERS = ["Full Name", "Email", "Phone Number", "Address", "Company"];
+//default sample csv for the example based
+const SAMPLE_CSV = [
+    IMPORT_HEADERS.join(","),
+    ["Jane Doe", "jane.doe@example.com", "+15551234567", "123 Main St, Springfield", "Acme Inc"].map(csvEscape).join(","),
+].join("\n");
+
+// splits a single CSV line into fields, respecting quoted commas
+function parseCsvLine(line) {
+    const fields = [];
+    let current = "";
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i += 1) {
+        const char = line[i];
+        if (inQuotes) {
+            if (char === '"' && line[i + 1] === '"') {
+                current += '"';
+                i += 1;
+            } else if (char === '"') {
+                inQuotes = false;
+            } else {
+                current += char;
+            }
+        } else if (char === '"') {
+            inQuotes = true;
+        } else if (char === ",") {
+            fields.push(current);
+            current = "";
+        } else {
+            current += char;
+        }
+    }
+    fields.push(current);
+    return fields;
+}
+
+// parses the uploaded CSV text into customer rows ready for the import action indexof
+function parseCustomersCsv(text) {
+    const lines = text.split(/\r\n|\n/).filter((line) => line.trim() !== "");
+    if (lines.length < 2) return [];
+//indexof
+    const headers = parseCsvLine(lines[0]).map((header) => header.trim().toLowerCase());
+    const nameIndex = headers.indexOf("full name");
+    const emailIndex = headers.indexOf("email");
+    const phoneIndex = headers.indexOf("phone number");
+    const addressIndex = headers.indexOf("address");
+    const companyIndex = headers.indexOf("company");
+
+    return lines.slice(1).map((line) => {
+        const fields = parseCsvLine(line);
+        const fullName = (fields[nameIndex] || "").trim();
+        const [firstName, ...rest] = fullName.split(" ").filter(Boolean);
+        return {
+            firstName: firstName || "",
+            lastName: rest.join(" "),
+            email: (fields[emailIndex] || "").trim(),
+            phone: (fields[phoneIndex] || "").trim(),
+            address: (fields[addressIndex] || "").trim(),
+            company: (fields[companyIndex] || "").trim(),
+        };
+    });
 }
 //allows to .join the array with the comma
 //if there is no address return null, undefined so that the it dont catch it as a error
@@ -103,13 +167,14 @@ export const loader = async ({ request }) => {
 
 // action handles CSV export for the selected customer ids
 export const action = async ({ request }) => {
+    console.log("action: ")
     const { admin } = await authenticate.admin(request);
     const formData = await request.formData();
     const intent = formData.get("intent");
 //allows to export teh csv file where as the IDs comes in the string format from the UI now it will allow to transfer it to the array 
     if (intent === "export") {
         const ids = JSON.parse(formData.get("ids") || "[]");
-
+//selected export 
         const customers = await Promise.all(
             ids.map(async (id) => {
                 const response = await admin.graphql(`
@@ -132,7 +197,59 @@ export const action = async ({ request }) => {
 
         return { intent: "export", csv: buildCustomersCsv(customers.filter(Boolean)) };
     }
-//allows to delete the 
+// creates one customer per parsed CSV row and reports any per-row errors
+//create customer through import csv file  
+    if (intent === "import") {
+        //get the form data rows or "undefined nothing" so that it will not throw error 
+        //error handling 
+        const rows = JSON.parse(formData.get("rows") || "[]");   //got the data from the frontend and parsing it to the array/object.
+        let imported = 0;
+        const rowErrors = [];
+
+        for (const row of rows) {
+            if (!row.email || !row.firstName) {
+                rowErrors.push({ row: row.email || row.firstName || "(blank row)", message: "First name and email are required" });
+                continue;
+            }
+
+            const input = { firstName: row.firstName, email: row.email };
+            if (row.lastName) input.lastName = row.lastName;
+            if (row.phone) input.phone = row.phone;
+//api called for the create customer
+            const response = await admin.graphql(`
+                #graphql
+                mutation CreateCustomer($input: CustomerInput!) {
+                    customerCreate(input: $input) {
+                        customer { id }
+                        userErrors { field message }
+                    }
+                }
+            `, { variables: { input } });
+
+            const result = (await response.json()).data.customerCreate;
+            if (result.userErrors?.length) {
+                rowErrors.push({ row: row.email, message: result.userErrors[0].message });
+                continue;
+            }
+//address create api mutation 
+//toast message for the {} 
+            if (row.address) {
+                await admin.graphql(`
+                    #graphql
+                    mutation CreateCustomerAddress($customerId: ID!, $address: MailingAddressInput!, $setAsDefault: Boolean) {
+                        customerAddressCreate(customerId: $customerId, address: $address, setAsDefault: $setAsDefault) {
+                            userErrors { field message }
+                        }
+                    }
+                `, { variables: { customerId: result.customer.id, address: { address1: row.address, company: row.company || undefined }, setAsDefault: true } });
+            }
+
+            imported += 1;
+        }
+
+        return { intent: "import", imported, rowErrors };
+    }
+//allows to delete the
     if (intent === "delete") {
         const id = formData.get("id");
         const response = await admin.graphql(`
@@ -169,6 +286,13 @@ export default function Customers() {
     const isDeleting = deleteFetcher.state !== "idle";
     const [pendingDeleteId, setPendingDeleteId] = useState(null);
 
+    const importFetcher = useFetcher();
+    const importResult = importFetcher.data;
+    const isImporting = importFetcher.state !== "idle";
+    const [importFile, setImportFile] = useState(null);
+    const [importRows, setImportRows] = useState(null);
+    const fileInputRef = useRef(null);
+
     const updateParam = useCallback((key, value) => {
         const params = new URLSearchParams(searchParams);
         if (value) {
@@ -188,7 +312,7 @@ export default function Customers() {
 
     useEffect(() => {
         if (exportFetcher.state === "idle" && exportResult?.intent === "export" && exportResult.csv) {
-            const blob = new Blob([exportResult.csv], { type: "text/csv;charset=utf-8;" });
+            const blob = new Blob([exportResult.csv], { type: "text/csv;charset=utf-8;" }); //allows to create  csv file 
             const url = URL.createObjectURL(blob);
             const link = document.createElement("a");
             link.href = url;
@@ -214,6 +338,47 @@ export default function Customers() {
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [deleteFetcher.state, deleteResult]);
+//call the import modal
+    useEffect(() => {
+        if (importFetcher.state === "idle" && importResult?.intent === "import") {
+            if (importResult.rowErrors?.length) {
+                shopify.toast.show(`${importResult.imported} imported, ${importResult.rowErrors.length} failed`, { isError: true });
+            } else {
+                shopify.toast.show(`${importResult.imported} customer(s) imported`);
+                document.getElementById("import-customers-modal")?.hideOverlay?.();
+                setImportFile(null);
+                setImportRows(null);
+                navigate(".", { replace: true });
+            }
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [importFetcher.state, importResult]);
+
+    const handleFileSelected = (event) => {
+        const file = event.currentTarget.files?.[0];
+        if (!file) return;
+        setImportFile(file);
+        const reader = new FileReader(); //file reader allows to read the imported file
+        reader.onload = () => setImportRows(parseCustomersCsv(String(reader.result || "")));
+        reader.readAsText(file);
+    };
+
+    const handleImport = () => {
+        if (!importRows?.length) return;
+        importFetcher.submit({ intent: "import", rows: JSON.stringify(importRows) }, { method: "post" });
+    };
+//handle downloadSample 
+    const handleDownloadSample = () => {
+        const blob = new Blob([SAMPLE_CSV], { type: "text/csv;charset=utf-8;" }); //alows to download csv file in the local device 
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "sample-customers.csv";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    };
 
     const confirmDelete = (id) => {
         setPendingDeleteId(id);
@@ -266,7 +431,7 @@ export default function Customers() {
             <s-button slot="secondary-actions" onClick={handleExport} loading={isExporting}>
                 Export
             </s-button>
-            <s-button slot="secondary-actions">
+            <s-button slot="secondary-actions" commandFor="import-customers-modal" command="--show">
                 Import
             </s-button>
 
@@ -290,6 +455,49 @@ export default function Customers() {
                     Delete
                 </s-button>
                 <s-button slot="secondary-actions" commandFor="delete-customer-modal" command="--hide" variant="tertiary">
+                    Cancel
+                </s-button>
+            </s-modal>
+
+            <s-modal id="import-customers-modal" heading="Import customers by CSV">
+                <s-stack direction="block" gap="base">
+                    <s-box
+                        padding="large"
+                        borderStyle="dashed"
+                        borderWidth="base"
+                        borderRadius="base"
+                        borderColor="subdued"
+                    >
+                        <s-stack direction="block" gap="base" alignItems="center">
+                            <input
+                                ref={fileInputRef}
+                                type="file"
+                                accept=".csv"
+                                style={{ display: "none" }}
+                                onChange={handleFileSelected}
+                            />
+                            <s-button variant="secondary" onClick={() => fileInputRef.current?.click()}>
+                                Add files
+                            </s-button>
+                            <s-text color="subdued">
+                                {importFile ? importFile.name : "Accepts .csv"}
+                            </s-text>
+                        </s-stack>
+                    </s-box>
+                    <s-link onClick={handleDownloadSample}>
+                        Download a sample CSV
+                    </s-link>
+                </s-stack>
+                <s-button
+                    slot="primary-action"
+                    variant="primary"
+                    onClick={handleImport}
+                    loading={isImporting}
+                    disabled={!importRows?.length}
+                >
+                    Import customers
+                </s-button>
+                <s-button slot="secondary-actions" commandFor="import-customers-modal" command="--hide" variant="tertiary">
                     Cancel
                 </s-button>
             </s-modal>

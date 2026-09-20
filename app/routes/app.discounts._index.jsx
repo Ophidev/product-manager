@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { authenticate } from "../shopify.server";
 //loader-- to get the data from the admin
 export const loader = async ({ request }) => {
-    console.log("Loader : fetched the data")
+    console.log("Loader : fetched the data");
     const { admin } = await authenticate.admin(request);
 
     const response = await admin.graphql(`

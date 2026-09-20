@@ -1,7 +1,7 @@
 import { useFetcher, useLoaderData, useNavigate } from "react-router";
 import { useEffect, useState } from "react";
 import { authenticate } from "../shopify.server";
-
+//languages default english
 const LANGUAGES = [
     { code: "en", name: "English" },
     { code: "fr", name: "French" },
@@ -15,7 +15,7 @@ const LANGUAGES = [
     { code: "hi", name: "Hindi" },
     { code: "ar", name: "Arabic" },
 ];
-
+//countries
 const COUNTRIES = [
     ["US", "United States"], ["CA", "Canada"], ["GB", "United Kingdom"], ["AU", "Australia"],
     ["IN", "India"], ["DE", "Germany"], ["FR", "France"], ["IT", "Italy"], ["ES", "Spain"],
@@ -29,7 +29,7 @@ const COUNTRIES = [
     ["CL", "Chile"], ["CO", "Colombia"], ["PE", "Peru"], ["NZ", "New Zealand"], ["PK", "Pakistan"],
     ["BD", "Bangladesh"], ["LK", "Sri Lanka"], ["TR", "Turkey"], ["RU", "Russia"], ["UA", "Ukraine"],
 ].map(([code, name]) => ({ code, name }));
-
+//dial-codes
 const DIAL_CODES = [
     { dial: "+1", label: "+1 (US/Canada)" },
     { dial: "+44", label: "+44 (UK)" },
@@ -52,7 +52,7 @@ const DIAL_CODES = [
     { dial: "+880", label: "+880 (Bangladesh)" },
     { dial: "+94", label: "+94 (Sri Lanka)" },
 ];
-
+//split the phone 
 function splitPhone(phone) {
     if (!phone) return { dialCode: "+1", number: "" };
     const match = DIAL_CODES.find((entry) => phone.startsWith(entry.dial));
@@ -64,13 +64,14 @@ function splitPhone(phone) {
 
 // loader fetches location for a language default; if editing, fetches full customer + default address
 export const loader = async ({ request, params }) => {
+    console.log("loader : loader call for edit")
     const { admin } = await authenticate.admin(request);
     const isNew = params.id === "new";
 
     if (isNew) {
         return { isNew: true, customer: null };
     }
-
+//not new then edit,customer then open the particular cx id 
     const customerId = `gid://shopify/Customer/${params.id}`;
     const response = await admin.graphql(`
         #graphql
@@ -95,7 +96,7 @@ export const loader = async ({ request, params }) => {
             }
         }
     `, { variables: { id: customerId } });
-
+//if there is no data throw error 
     const data = (await response.json()).data;
     if (!data.customer) {
         throw new Response("Customer not found", { status: 404 });
@@ -105,11 +106,12 @@ export const loader = async ({ request, params }) => {
 };
 
 export const action = async ({ request, params }) => {
+    console.log("Action: customer edit page");
     const { admin } = await authenticate.admin(request);
     const isNew = params.id === "new";
     const formData = await request.formData();
-    const payload = JSON.parse(formData.get("payload") || "{}");
-
+    const payload = JSON.parse(formData.get("payload") || "{}"); //converting string to JS object 
+// .............................................................................................
     const { firstName, lastName, email, phone, locale, address } = payload;
 
     if (!firstName || !firstName.trim()) {
@@ -118,6 +120,7 @@ export const action = async ({ request, params }) => {
     if (!lastName || !lastName.trim()) {
         return { userErrors: [{ field: ["lastName"], message: "Last name is required" }] };
     }
+    //regex syntax   --- something@something.com
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         return { userErrors: [{ field: ["email"], message: "A valid email is required" }] };
     }
@@ -147,7 +150,7 @@ export const action = async ({ request, params }) => {
             `, { variables: { customerId, addressId: existingAddressId, address: addressInput, setAsDefault: true } });
             return (await response.json()).data.customerAddressUpdate.userErrors;
         }
-
+//create customer address api mutaion 
         const response = await admin.graphql(`
             #graphql
             mutation CreateCustomerAddress($customerId: ID!, $address: MailingAddressInput!, $setAsDefault: Boolean) {
@@ -159,12 +162,12 @@ export const action = async ({ request, params }) => {
         `, { variables: { customerId, address: addressInput, setAsDefault: true } });
         return (await response.json()).data.customerAddressCreate.userErrors;
     }
-
+//create customer new ID 
     if (isNew) {
         const input = { firstName, lastName, email };
         if (locale) input.locale = locale;
         if (phone) input.phone = phone;
-
+//create customer api 
         const response = await admin.graphql(`
             #graphql
             mutation CreateCustomer($input: CustomerInput!) {
@@ -191,7 +194,7 @@ export const action = async ({ request, params }) => {
 
     const customerId = `gid://shopify/Customer/${params.id}`;
     const { initial, addressId } = payload;
-
+//dirty-state for the save bar------------------------------------------------------------------------------
     const customerUpdateInput = { id: customerId };
     let needsUpdate = false;
     if (firstName !== initial.firstName) { customerUpdateInput.firstName = firstName; needsUpdate = true; }
@@ -217,7 +220,7 @@ export const action = async ({ request, params }) => {
         }
     }
 
-    const addressChanged = JSON.stringify(address) !== JSON.stringify(initial.address);
+    const addressChanged = JSON.stringify(address) !== JSON.stringify(initial.address);  //converting object to string because of form data to send the details 
     if (addressChanged) {
         const addressErrors = await saveAddress(customerId, addressId);
         if (addressErrors?.length) {
@@ -227,11 +230,11 @@ export const action = async ({ request, params }) => {
 
     return { success: true };
 };
-
+//UI for the edit page
 export default function CustomerForm() {
     const { isNew, customer } = useLoaderData();
     const navigate = useNavigate();
-    const fetcher = useFetcher();
+    const fetcher = useFetcher();   //api call without full page reload 
     const result = fetcher.data;
     const isSaving = fetcher.state !== "idle";
 
