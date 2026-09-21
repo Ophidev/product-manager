@@ -1,6 +1,7 @@
 import { useFetcher, useLoaderData, useNavigate } from "react-router";
 import { useEffect, useState } from "react";
 import { authenticate } from "../shopify.server";
+import { useLanguage } from "../context/LanguageContext";
 //loader is been called to collect the Collection ID from route
 // fetches the data from the collection page
 //returning back to the component
@@ -172,6 +173,7 @@ export const action = async ({ request, params }) => {
 // collection form for the UI
 export default function CollectionForm() {
     const { isNew, collection, sourceId } = useLoaderData();
+    const { t: { collectionForm: t } } = useLanguage();
     const navigate = useNavigate();
     const fetcher = useFetcher();
     const result = fetcher.data;
@@ -189,7 +191,7 @@ export default function CollectionForm() {
 //show the toast banner
     useEffect(() => {
         if (result?.success && !isSaving) {
-            shopify.toast.show(isNew ? "Collection created" : "Collection updated"); 
+            shopify.toast.show(isNew ? t.collectionCreatedToast : t.collectionUpdatedToast);
             navigate("/app/collections");
         } else if (result?.userErrors?.length && !isSaving) {
             shopify.toast.show(result.userErrors[0].message, { isError: true });
@@ -245,8 +247,8 @@ export default function CollectionForm() {
     };
 //if new write the collection uI 
     return (
-        <s-page heading={isNew ? "Create Collection" : collection.title}>
-            <s-link href="/app/collections" slot="breadcrumb-actions">Collections</s-link>
+        <s-page heading={isNew ? t.createCollectionHeading : collection.title}>
+            <s-link href="/app/collections" slot="breadcrumb-actions">{t.collectionsBreadcrumb}</s-link>
 
             {result?.userErrors?.length > 0 && (
                 <s-banner tone="critical">
@@ -256,30 +258,30 @@ export default function CollectionForm() {
 {/* //savebar discard */}
             <form data-save-bar data-discard-confirmation onSubmit={handleSubmit} onReset={handleDiscard}>
                 <s-stack direction="block" gap="base">
-                    <s-section heading="Title">
+                    <s-section heading={t.titleSection}>
                         <s-text-field
-                            label="Title"
+                            label={t.titleSection}
                             name="title"
                             error="Title is required"
                             required
-                            placeholder="e.g. Summer collection"
+                            placeholder={t.titlePlaceholder}
                             value={title}
                             onInput={(event) => setTitle(event.currentTarget.value)}
                         />
                     </s-section>
 {/* Section for discription area */}
-                    <s-section heading="Description">
+                    <s-section heading={t.descriptionSection}>
                         <s-text-area
-                            label="Description"
+                            label={t.descriptionSection}
                             name="description"
                             rows={4}
-                            placeholder="e.g. Write about your collection info"
+                            placeholder={t.descriptionPlaceholder}
                             value={description}
                             onInput={(event) => setDescription(event.currentTarget.value)}
                         />
                     </s-section>
 {/* add products with the help of resource picker */}
-                    <s-section heading="Products">
+                    <s-section heading={t.productsSection}>
                         <s-stack direction="block" gap="base">
                             {selectedProducts.length > 0 && (
                                 <s-stack direction="inline" gap="small">
@@ -299,7 +301,7 @@ export default function CollectionForm() {
                                 </s-stack>
                             )}
                             <s-button variant="secondary" icon="plus" onClick={handleAddProducts}>
-                                Add product
+                                {t.addProduct}
                             </s-button>
                         </s-stack>
                     </s-section>

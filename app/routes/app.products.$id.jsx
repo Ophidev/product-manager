@@ -1,6 +1,7 @@
 import { useFetcher, useLoaderData, useNavigate } from "react-router";
 import { useEffect, useState } from "react";
 import { authenticate } from "../shopify.server";
+import { useLanguage } from "../context/LanguageContext";
 
 const PRODUCT_FIELDS = `
     id
@@ -346,6 +347,7 @@ export const action = async ({ request, params }) => {
 //Ui section 
 export default function ProductForm() {
     const { isNew, product, locationId, categories } = useLoaderData();
+    const { t: { common: c, productForm: t } } = useLanguage();
     const navigate = useNavigate();
     const fetcher = useFetcher();
     const result = fetcher.data;
@@ -367,8 +369,8 @@ export default function ProductForm() {
 //when the product got saved it shows 
     useEffect(() => {
         if (result?.success && !isSaving) {
-            shopify.toast.show(isNew ? "Product created" : "Product updated");
-            //navigate to the product page of shopify 
+            shopify.toast.show(isNew ? t.productCreatedToast : t.productUpdatedToast);
+            //navigate to the product page of shopify
             navigate("/app/products");
         } else if (result?.userErrors?.length && !isSaving) {
             shopify.toast.show(result.userErrors[0].message, { isError: true });
@@ -440,8 +442,8 @@ export default function ProductForm() {
     };
     //polaris web component starts
     return (
-        <s-page heading={isNew ? "Add product" : product.title}>
-            <s-link href="/app/products" slot="breadcrumb-actions">Products</s-link>
+        <s-page heading={isNew ? t.addProductHeading : product.title}>
+            <s-link href="/app/products" slot="breadcrumb-actions">{t.productsBreadcrumb}</s-link>
 
             {result?.userErrors?.length > 0 && (
                 <s-banner tone="critical">
@@ -451,42 +453,42 @@ export default function ProductForm() {
 {/* used-save-bar to minimise the loc */}
             <form data-save-bar data-discard-confirmation onSubmit={handleSubmit} onReset={handleDiscard}>
             <s-stack direction="block" gap="base">
-                <s-section heading="Product information">
+                <s-section heading={t.productInformation}>
                     <s-stack direction="block" gap="base">
                         <s-text-field
-                            label="Title"
+                            label={t.titleLabel}
                             name="title"
                             required
-                            placeholder="e.g. Cotton T-Shirt"
+                            placeholder={t.titlePlaceholder}
                             value={title}
                             onInput={(event) => setTitle(event.currentTarget.value)}
                         />
                         <s-text-area
-                            label="Description"
-                            placeholder="About your products and more...."
+                            label={t.description}
+                            placeholder={t.descriptionPlaceholder}
                             // error="Upto 600 character"
-                            details="Make it short & Simple to Read"
+                            details={t.descriptionDetails}
                             name="description"
                             rows={5}
-                            
+
                             value={description}
                             onInput={(event) => setDescription(event.currentTarget.value)}
                         />
                     </s-stack>
                 </s-section>
 
-                <s-section heading="Upload Media">
+                <s-section heading={t.uploadMedia}>
                     <s-stack direction="block" gap="base">
                         {existingMedia.length > 0 && (
                             <s-stack direction="inline" gap="small">
                                 {existingMedia.map((media) => (
                                     <s-stack key={media.id} direction="block" gap="small-200" alignItems="center">
-                                        <s-thumbnail src={media.image?.url} alt={media.alt || "Product media"} size="large" />
+                                        <s-thumbnail src={media.image?.url} alt={media.alt || t.productMedia} size="large" />
                                         <s-button
                                             icon="delete"
                                             variant="tertiary"
                                             tone="critical"
-                                            accessibilityLabel="Remove image"
+                                            accessibilityLabel={t.removeImage}
                                             onClick={() => removeExistingMedia(media.id)}
                                         />
                                     </s-stack>
@@ -494,12 +496,12 @@ export default function ProductForm() {
                             </s-stack>
                         )}
                         <s-drop-zone
-                            label="Product media"
+                            label={t.productMedia}
                             labelAccessibilityVisibility="exclusive"
-                            accessibilityLabel="Upload product images"
+                            accessibilityLabel={t.uploadProductImages}
                             accept="image/*"
                             multiple
-                            error="File size must be less than 5mb"
+                            error={t.dropZoneError}
                             onChange={handleImageChange}
                         >
                             {newImages.length > 0 ? (
@@ -511,7 +513,7 @@ export default function ProductForm() {
                                                 icon="delete"
                                                 variant="tertiary"
                                                 tone="critical"
-                                                accessibilityLabel="Remove image"
+                                                accessibilityLabel={t.removeImage}
                                                 onClick={(event) => {
                                                     event.stopPropagation();
                                                     removeNewImage(index);
@@ -526,16 +528,16 @@ export default function ProductForm() {
                 </s-section>
 
                 {!isNew && (
-                    <s-section heading="Category">
+                    <s-section heading={t.category}>
                         <s-select
-                            label="Category"
+                            label={t.category}
                             name="categoryId"
                             labelAccessibilityVisibility="exclusive"
-                            placeholder="Uncategorized"
+                            placeholder={t.uncategorized}
                             value={categoryId}
                             onChange={(event) => setCategoryId(event.currentTarget.value)}
                         >
-                            <s-option value="">Uncategorized</s-option>
+                            <s-option value="">{t.uncategorized}</s-option>
                             {categoryOptions.map((category) => (
                                 <s-option key={category.id} value={category.id}>{category.name}</s-option>
                             ))}
@@ -543,15 +545,15 @@ export default function ProductForm() {
                     </s-section>
                 )}
 
-                <s-section heading="Pricing">
-                    <s-money-field label="Price" details="Recommended price for the market" name="price" value={price} onChange={(event) => setPrice(event.currentTarget.value)} />
+                <s-section heading={t.pricing}>
+                    <s-money-field label={t.price} details={t.priceDetails} name="price" value={price} onChange={(event) => setPrice(event.currentTarget.value)} />
                 </s-section>
 
-                <s-section heading="Inventory">
+                <s-section heading={t.inventoryHeading}>
                     <s-number-field
-                        label="Inventory"
+                        label={t.inventoryHeading}
                         name="inventory"
-                        details="Recommended Inventory as per warehouse"
+                        details={t.inventoryDetails}
                         min={0}
                         step={1}
                         value={inventory}
@@ -559,17 +561,17 @@ export default function ProductForm() {
                     />
                 </s-section>
 
-                <s-section heading="Status">
+                <s-section heading={t.statusHeading}>
                     <s-choice-list
-                        label="Status"
+                        label={t.statusHeading}
                         name="status"
-                        details= "Active will reflect to your Product Page"
+                        details={t.statusDetails}
                         labelAccessibilityVisibility="exclusive"
                         onChange={(event) => setStatus(event.currentTarget.values[0])}
                     >
-                        <s-choice value="ACTIVE" selected={status === "ACTIVE"}>Active</s-choice>
-                        <s-choice value="DRAFT" selected={status === "DRAFT"}>Draft</s-choice>
-                        <s-choice value="ARCHIVED" selected={status === "ARCHIVED"}>Archived</s-choice>
+                        <s-choice value="ACTIVE" selected={status === "ACTIVE"}>{c.active}</s-choice>
+                        <s-choice value="DRAFT" selected={status === "DRAFT"}>{c.draft}</s-choice>
+                        <s-choice value="ARCHIVED" selected={status === "ARCHIVED"}>{t.archived}</s-choice>
                     </s-choice-list>
                 </s-section>
             </s-stack>

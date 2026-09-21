@@ -1,6 +1,7 @@
 import { useLoaderData, useFetcher } from "react-router";
 import { useEffect, useState } from "react";
 import { authenticate } from "../shopify.server";
+import { format, useLanguage } from "../context/LanguageContext";
 //read fetch
 export const loader = async ({ request }) => {
     //test 
@@ -56,6 +57,7 @@ export const action = async ({ request }) => {
 // UI 
 export default function Collections() {
     const { collections } = useLoaderData();
+    const { t: { common: c, collections: t } } = useLanguage();
     const deleteFetcher = useFetcher();
     const deleteResult = deleteFetcher.data;
 
@@ -83,9 +85,9 @@ export default function Collections() {
     };
 
     return (
-        <s-page heading="Collections">
+        <s-page heading={t.heading}>
             <s-button slot="primary-action" href="/app/collections/new">
-                Create collection
+                {t.createCollection}
             </s-button>
 
             {deleteResult?.userErrors?.length > 0 && (
@@ -94,12 +96,12 @@ export default function Collections() {
                 </s-banner>
             )}
 {/* if the deletemodal hits */}
-            <s-modal id="delete-collection-modal" heading="Delete collection">
+            <s-modal id="delete-collection-modal" heading={t.deleteCollectionHeading}>
                 <s-stack direction="block" gap="base">
                     <s-text>
                         {pendingDeleteIds.length === 1
-                            ? "Are you sure you want to delete the collection?"
-                            : `Are you sure you want to delete ${pendingDeleteIds.length} collections?`}
+                            ? t.confirmDeleteOne
+                            : format(t.confirmDeleteMany, { count: pendingDeleteIds.length })}
                     </s-text>
                 </s-stack>
                 <s-button
@@ -109,10 +111,10 @@ export default function Collections() {
                     onClick={handleDelete}
                     loading={deleteFetcher.state !== "idle"}
                 >
-                    Delete
+                    {c.delete}
                 </s-button>
                 <s-button slot="secondary-actions" commandFor="delete-collection-modal" command="--hide" variant="tertiary">
-                    Cancel
+                    {c.cancel}
                 </s-button>
             </s-modal>
 
@@ -120,17 +122,17 @@ export default function Collections() {
                 <s-table>
                     <s-grid slot="filters" gap="small-200" gridTemplateColumns="1fr">
                         <s-text-field
-                            label="Search and filter"
+                            label={t.searchAndFilter}
                             labelAccessibilityVisibility="exclusive"
                             icon="search"
-                            placeholder="Search"
+                            placeholder={t.searchPlaceholder}
                             value={search}
                             onInput={(event) => setSearch(event.currentTarget.value)}
                         />
                     </s-grid>
                     <s-table-header-row>
-                        <s-table-header listSlot="primary">Title</s-table-header>
-                        <s-table-header format="numeric">Products</s-table-header>
+                        <s-table-header listSlot="primary">{t.titleColumn}</s-table-header>
+                        <s-table-header format="numeric">{t.productsColumn}</s-table-header>
                         <s-table-header></s-table-header>
                     </s-table-header-row>
                     <s-table-body>
@@ -177,7 +179,7 @@ export default function Collections() {
                                                 icon="delete"
                                                 onClick={() => confirmDelete([collection.id])}
                                             >
-                                                Delete collection
+                                                {t.deleteCollectionAction}
                                             </s-button>
                                         </s-menu>
                                     </s-table-cell>

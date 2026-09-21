@@ -1,6 +1,8 @@
 import { useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
+import { LanguageSelector } from "../components/LanguageSelector";
+import { useLanguage } from "../context/LanguageContext";
 
 const STAT_FILTERS = {
     total: null,
@@ -62,31 +64,34 @@ function StatTile({ label, value, filter, tone }) {
 //allows to share the product which is fetched by Loader 
 export default function Dashboard() {
     const { stats, recentProducts } = useLoaderData();
-// UI section 
+    const { t: { home: t } } = useLanguage();
+// UI section
     return (
-        <s-page heading="Dashboard">
-            <s-section heading="Catalog overview">
+        <s-page heading={t.dashboardHeading}>
+            <LanguageSelector />
+
+            <s-section heading={t.catalogOverview}>
                 <s-grid gridTemplateColumns="repeat(5, 1fr)" gap="base">
-                    <StatTile label="Total products" value={stats.total.count} filter={null} tone="neutral" />
-                    <StatTile label="Active" value={stats.active.count} filter={STAT_FILTERS.active ? "active" : null} tone="success" />
-                    <StatTile label="Draft" value={stats.draft.count} filter="draft" tone="neutral" />
-                    <StatTile label="Out of stock" value={stats.outOfStock.count} filter="out_of_stock" tone="critical" />
-                    <StatTile label="Low inventory" value={stats.lowInventory.count} filter="low_inventory" tone="caution" />
+                    <StatTile label={t.totalProducts} value={stats.total.count} filter={null} tone="neutral" />
+                    <StatTile label={t.active} value={stats.active.count} filter={STAT_FILTERS.active ? "active" : null} tone="success" />
+                    <StatTile label={t.draft} value={stats.draft.count} filter="draft" tone="neutral" />
+                    <StatTile label={t.outOfStock} value={stats.outOfStock.count} filter="out_of_stock" tone="critical" />
+                    <StatTile label={t.lowInventory} value={stats.lowInventory.count} filter="low_inventory" tone="caution" />
                 </s-grid>
             </s-section>
 
-            <s-section heading="Recently updated products" padding= "2px">
+            <s-section heading={t.recentlyUpdatedProducts} padding= "2px">
                 {recentProducts.length === 0 ? (
                     <s-box padding="base">
-                        <s-text color="subdued">No products yet. Products you edit will show up here.</s-text>
+                        <s-text color="subdued">{t.noProductsYet}</s-text>
                     </s-box>
                 ) : (
                     <s-table variant="auto">
                         <s-table-header-row>
-                            <s-table-header listSlot="primary">Product</s-table-header>
-                            <s-table-header format="numeric">Inventory</s-table-header>
-                            <s-table-header>Updated</s-table-header>
-                            <s-table-header listSlot="secondary">Status</s-table-header>
+                            <s-table-header listSlot="primary">{t.product}</s-table-header>
+                            <s-table-header format="numeric">{t.inventory}</s-table-header>
+                            <s-table-header>{t.updated}</s-table-header>
+                            <s-table-header listSlot="secondary">{t.status}</s-table-header>
                         </s-table-header-row>
                         <s-table-body>
                             {recentProducts.map((product) => (
@@ -117,7 +122,7 @@ export default function Dashboard() {
                                     </s-table-cell>
                                     <s-table-cell>
                                         <s-badge color="base" tone={product.status === "ACTIVE" ? "success" : "neutral"}>
-                                            {product.status === "ACTIVE" ? "Active" : "Draft"}
+                                            {product.status === "ACTIVE" ? t.active : t.draft}
                                         </s-badge>
                                     </s-table-cell>
                                 </s-table-row>

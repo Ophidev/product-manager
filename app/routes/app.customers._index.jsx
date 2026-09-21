@@ -1,6 +1,7 @@
 import { useLoaderData, useNavigate, useFetcher, useSearchParams } from "react-router";
 import { useEffect, useCallback, useState, useRef } from "react";
 import { authenticate } from "../shopify.server";
+import { useLanguage } from "../context/LanguageContext";
 //allows to sort the customer by name and created at
 const SORT_KEYS = {
     name: "NAME",
@@ -271,6 +272,7 @@ export const action = async ({ request }) => {
 //UI 
 export default function Customers() {
     const { customers, error, search: initialSearch, sort, order } = useLoaderData();
+    const { t: { common: c, customers: t } } = useLanguage();
     const [searchInput, setSearchInput] = useState(initialSearch);
     const [selectedIds, setSelectedIds] = useState(() => new Set());
 
@@ -321,7 +323,7 @@ export default function Customers() {
             link.click();
             document.body.removeChild(link);
             URL.revokeObjectURL(url);
-            shopify.toast.show("Customers exported");
+            shopify.toast.show(t.customersExportedToast);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [exportFetcher.state, exportResult]);
@@ -331,7 +333,7 @@ export default function Customers() {
             if (deleteResult.userErrors?.length) {
                 shopify.toast.show(deleteResult.userErrors[0].message, { isError: true });
             } else {
-                shopify.toast.show("Customer deleted");
+                shopify.toast.show(t.customerDeletedToast);
                 document.getElementById("delete-customer-modal")?.hideOverlay?.();
                 setPendingDeleteId(null);
             }
@@ -414,7 +416,7 @@ export default function Customers() {
 
     const handleExport = () => {
         if (selectedIds.size === 0) {
-            shopify.toast.show("Select at least one customer to export.", { isError: true });
+            shopify.toast.show(t.selectOneToExport, { isError: true });
             return;
         }
         exportFetcher.submit(
@@ -424,15 +426,15 @@ export default function Customers() {
     };
 
     return (
-        <s-page heading="Customers">
+        <s-page heading={t.heading}>
             <s-button slot="primary-action" href="/app/customers/new">
-                Add customer
+                {t.addCustomer}
             </s-button>
             <s-button slot="secondary-actions" onClick={handleExport} loading={isExporting}>
-                Export
+                {t.export}
             </s-button>
             <s-button slot="secondary-actions" commandFor="import-customers-modal" command="--show">
-                Import
+                {t.import}
             </s-button>
 
             {error && (
@@ -441,9 +443,9 @@ export default function Customers() {
                 </s-banner>
             )}
 
-            <s-modal id="delete-customer-modal" heading="Delete customer">
+            <s-modal id="delete-customer-modal" heading={t.deleteCustomerHeading}>
                 <s-stack direction="block" gap="base">
-                    <s-text>Are you sure you want to delete this customer?</s-text>
+                    <s-text>{t.confirmDeleteCustomer}</s-text>
                 </s-stack>
                 <s-button
                     slot="primary-action"
@@ -452,14 +454,14 @@ export default function Customers() {
                     onClick={handleDelete}
                     loading={isDeleting}
                 >
-                    Delete
+                    {c.delete}
                 </s-button>
                 <s-button slot="secondary-actions" commandFor="delete-customer-modal" command="--hide" variant="tertiary">
-                    Cancel
+                    {c.cancel}
                 </s-button>
             </s-modal>
 
-            <s-modal id="import-customers-modal" heading="Import customers by CSV">
+            <s-modal id="import-customers-modal" heading={t.importCsvHeading}>
                 <s-stack direction="block" gap="base">
                     <s-box
                         padding="large"
@@ -477,15 +479,15 @@ export default function Customers() {
                                 onChange={handleFileSelected}
                             />
                             <s-button variant="secondary" onClick={() => fileInputRef.current?.click()}>
-                                Add files
+                                {t.addFiles}
                             </s-button>
                             <s-text color="subdued">
-                                {importFile ? importFile.name : "Accepts .csv"}
+                                {importFile ? importFile.name : t.acceptsCsv}
                             </s-text>
                         </s-stack>
                     </s-box>
                     <s-link onClick={handleDownloadSample}>
-                        Download a sample CSV
+                        {t.downloadSample}
                     </s-link>
                 </s-stack>
                 <s-button
@@ -495,10 +497,10 @@ export default function Customers() {
                     loading={isImporting}
                     disabled={!importRows?.length}
                 >
-                    Import customers
+                    {t.importCustomers}
                 </s-button>
                 <s-button slot="secondary-actions" commandFor="import-customers-modal" command="--hide" variant="tertiary">
-                    Cancel
+                    {c.cancel}
                 </s-button>
             </s-modal>
 
@@ -506,42 +508,42 @@ export default function Customers() {
                 <s-table>
                     <s-grid slot="filters" gap="small-200" gridTemplateColumns="1fr auto">
                         <s-text-field
-                            label="Search customers"
+                            label={t.searchCustomers}
                             labelAccessibilityVisibility="exclusive"
                             icon="search"
-                            placeholder="Search customers"
+                            placeholder={t.searchCustomers}
                             value={searchInput}
                             onInput={(event) => setSearchInput(event.currentTarget.value)}
                         />
                         <s-button
                             icon="sort"
                             variant="secondary"
-                            accessibilityLabel="Sort"
+                            accessibilityLabel={c.sort}
                             interestFor="sort-tooltip"
                             commandFor="sort-actions"
                         />
                         <s-tooltip id="sort-tooltip">
-                            <s-text>Sort</s-text>
+                            <s-text>{c.sort}</s-text>
                         </s-tooltip>
                         <s-popover id="sort-actions">
                             <s-stack gap="none">
                                 <s-box padding="small">
                                     <s-choice-list
-                                        label="Sort by"
+                                        label={c.sortBy}
                                         onChange={(event) => updateParam("sort", event.currentTarget.values[0])}
                                     >
-                                        <s-choice value="name" selected={sort === "name"}>Customer name</s-choice>
-                                        <s-choice value="created" selected={sort === "created"}>Created</s-choice>
+                                        <s-choice value="name" selected={sort === "name"}>{t.customerName}</s-choice>
+                                        <s-choice value="created" selected={sort === "created"}>{c.created}</s-choice>
                                     </s-choice-list>
                                 </s-box>
                                 <s-divider />
                                 <s-box padding="small">
                                     <s-choice-list
-                                        label="Order by"
+                                        label={c.orderBy}
                                         onChange={(event) => updateParam("order", event.currentTarget.values[0])}
                                     >
-                                        <s-choice value="asc" selected={order === "asc"}>A-Z</s-choice>
-                                        <s-choice value="desc" selected={order === "desc"}>Z-A</s-choice>
+                                        <s-choice value="asc" selected={order === "asc"}>{c.aToZ}</s-choice>
+                                        <s-choice value="desc" selected={order === "desc"}>{c.zToA}</s-choice>
                                     </s-choice-list>
                                 </s-box>
                             </s-stack>
@@ -550,17 +552,17 @@ export default function Customers() {
                     <s-table-header-row>
                         <s-table-header>
                             <s-checkbox
-                                accessibilityLabel="Select all customers"
+                                accessibilityLabel={t.selectAllCustomers}
                                 checked={allSelected}
                                 onChange={toggleAll}
                             />
                         </s-table-header>
-                        <s-table-header listSlot="primary">Customer name</s-table-header>
-                        <s-table-header>Email subscription</s-table-header>
-                        <s-table-header>Location</s-table-header>
-                        <s-table-header format="numeric">Orders</s-table-header>
-                        <s-table-header format="numeric">Amount spent</s-table-header>
-                        <s-table-header>Actions</s-table-header>
+                        <s-table-header listSlot="primary">{t.customerName}</s-table-header>
+                        <s-table-header>{t.emailSubscription}</s-table-header>
+                        <s-table-header>{t.location}</s-table-header>
+                        <s-table-header format="numeric">{t.orders}</s-table-header>
+                        <s-table-header format="numeric">{t.amountSpent}</s-table-header>
+                        <s-table-header>{t.actions}</s-table-header>
                     </s-table-header-row>
 
                     <s-table-body>
@@ -569,15 +571,15 @@ export default function Customers() {
                                 <s-table-cell>
                                     <s-box padding="large">
                                         <s-stack direction="block" gap="base" alignItems="center">
-                                            <s-heading>No customers found</s-heading>
+                                            <s-heading>{t.noCustomersFound}</s-heading>
                                             <s-paragraph color="subdued">
                                                 {initialSearch
-                                                    ? "Try a different search term."
-                                                    : "Add a customer to get started."}
+                                                    ? t.tryDifferentSearch
+                                                    : t.addCustomerToStart}
                                             </s-paragraph>
                                             {!initialSearch && (
                                                 <s-button href="/app/customers/new" variant="primary">
-                                                    Add customer
+                                                    {t.addCustomer}
                                                 </s-button>
                                             )}
                                         </s-stack>
@@ -615,7 +617,7 @@ export default function Customers() {
                                     </s-table-cell>
                                     <s-table-cell>
                                         <s-badge tone={subscribed ? "success" : "neutral"}>
-                                            {subscribed ? "Subscribed" : "Not subscribed"}
+                                            {subscribed ? t.subscribed : t.notSubscribed}
                                         </s-badge>
                                     </s-table-cell>
                                     <s-table-cell>{location}</s-table-cell>
@@ -634,7 +636,7 @@ export default function Customers() {
                                             interestFor={`edit-tooltip-${numericId}`}
                                         />
                                         <s-tooltip id={`edit-tooltip-${numericId}`}>
-                                            <s-text>Update Customer</s-text>
+                                            <s-text>{t.updateCustomer}</s-text>
                                         </s-tooltip>
                                         <s-button
                                             icon="menu-vertical"
@@ -649,7 +651,7 @@ export default function Customers() {
                                                 icon="delete"
                                                 onClick={() => confirmDelete(customer.id)}
                                             >
-                                                Delete customer
+                                                {t.deleteCustomerAction}
                                             </s-button>
                                         </s-menu>
                                     </s-table-cell>

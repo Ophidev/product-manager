@@ -1,6 +1,7 @@
 import { useLoaderData, useFetcher } from "react-router";
 import { useEffect, useState } from "react";
 import { authenticate } from "../shopify.server";
+import { format, useLanguage } from "../context/LanguageContext";
 //loader-- to get the data from the admin
 export const loader = async ({ request }) => {
     console.log("Loader : fetched the data");
@@ -81,6 +82,7 @@ export const action = async ({ request }) => {
 // UI
 export default function Discounts() {
     const { discounts } = useLoaderData();
+    const { t: { common: c, discounts: t } } = useLanguage();
     const deleteFetcher = useFetcher();
     const deleteResult = deleteFetcher.data;
     const [search, setSearch] = useState("");
@@ -110,13 +112,13 @@ export default function Discounts() {
 //discount copy code 
     const copyCode = async (code) => {
         await navigator.clipboard.writeText(code);
-        shopify.toast.show("Discount code copied");
+        shopify.toast.show(t.codeCopiedToast);
     };
 
     return (
-        <s-page heading="Discounts">
+        <s-page heading={t.heading}>
             <s-button slot="primary-action" href="/app/discounts/new">
-                Create Discount
+                {t.createDiscount}
             </s-button>
 
             {deleteResult?.userErrors?.length > 0 && (
@@ -125,12 +127,12 @@ export default function Discounts() {
                 </s-banner>
             )}
 
-            <s-modal id="delete-discount-modal" heading="Delete discount">
+            <s-modal id="delete-discount-modal" heading={t.deleteDiscountHeading}>
                 <s-stack direction="block" gap="base">
                     <s-text>
                         {pendingDeleteIds.length === 1
-                            ? "Are you sure you want to delete the discount?"
-                            : `Are you sure you want to delete ${pendingDeleteIds.length} discounts?`}
+                            ? t.confirmDeleteOne
+                            : format(t.confirmDeleteMany, { count: pendingDeleteIds.length })}
                     </s-text>
                 </s-stack>
                 <s-button
@@ -140,10 +142,10 @@ export default function Discounts() {
                     onClick={handleDelete}
                     loading={deleteFetcher.state !== "idle"}
                 >
-                    Delete
+                    {c.delete}
                 </s-button>
                 <s-button slot="secondary-actions" commandFor="delete-discount-modal" command="--hide" variant="tertiary">
-                    Cancel
+                    {c.cancel}
                 </s-button>
             </s-modal>
 
@@ -151,20 +153,20 @@ export default function Discounts() {
                 <s-table>
                     <s-grid slot="filters" gap="small-200" gridTemplateColumns="1fr">
                         <s-text-field
-                            label="Search and filter"
+                            label={c.search}
                             labelAccessibilityVisibility="exclusive"
                             icon="search"
-                            placeholder="Search"
+                            placeholder={c.search}
                             value={search}
                             onInput={(event) => setSearch(event.currentTarget.value)}
                         />
                     </s-grid>
                     <s-table-header-row>
-                        <s-table-header listSlot="primary">Discount Code</s-table-header>
-                        <s-table-header format="numeric">Percentage off</s-table-header>
-                        <s-table-header>Applies to</s-table-header>
-                        <s-table-header>Eligibility</s-table-header>
-                        <s-table-header>Status</s-table-header>
+                        <s-table-header listSlot="primary">{t.discountCode}</s-table-header>
+                        <s-table-header format="numeric">{t.percentageOff}</s-table-header>
+                        <s-table-header>{t.appliesTo}</s-table-header>
+                        <s-table-header>{t.eligibility}</s-table-header>
+                        <s-table-header>{c.status}</s-table-header>
                         <s-table-header></s-table-header>
                     </s-table-header-row>
                     <s-table-body>
@@ -185,7 +187,7 @@ export default function Discounts() {
                                                 onClick={() => copyCode(discount.code)}
                                             />
                                             <s-tooltip id={`copy-tooltip-${discountNumericId}`}>
-                                                <s-text>Copy code</s-text>
+                                                <s-text>{t.copyCode}</s-text>
                                             </s-tooltip>
                                             <s-button
                                                 icon="edit"
@@ -195,7 +197,7 @@ export default function Discounts() {
                                                 interestFor={`edit-tooltip-${discountNumericId}`}
                                             />
                                             <s-tooltip id={`edit-tooltip-${discountNumericId}`}>
-                                                <s-text>Update Discount</s-text>
+                                                <s-text>{t.updateDiscount}</s-text>
                                             </s-tooltip>
                                         </s-grid>
                                     </s-table-cell>
@@ -205,10 +207,10 @@ export default function Discounts() {
                                     <s-table-cell>
                                         {discount.collectionTitles.length > 0 ? discount.collectionTitles.join(", ") : "-"}
                                     </s-table-cell>
-                                    <s-table-cell>All customers</s-table-cell>
+                                    <s-table-cell>{c.allCustomers}</s-table-cell>
                                     <s-table-cell>
                                         <s-badge tone={discount.status === "ACTIVE" ? "success" : "neutral"}>
-                                            {discount.status}
+                                            {discount.status === "ACTIVE" ? c.active : discount.status === "DRAFT" ? c.draft : discount.status}
                                         </s-badge>
                                     </s-table-cell>
                                     <s-table-cell>
@@ -220,7 +222,7 @@ export default function Discounts() {
                                                 icon="delete"
                                                 onClick={() => confirmDelete([discount.id])}
                                             >
-                                                Delete Discount
+                                                {t.deleteDiscountAction}
                                             </s-button>
                                         </s-menu>
                                     </s-table-cell>

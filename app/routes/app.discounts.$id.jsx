@@ -1,6 +1,7 @@
 import { useFetcher, useLoaderData, useNavigate } from "react-router";
 import { useEffect, useState } from "react";
 import { authenticate } from "../shopify.server";
+import { format, useLanguage } from "../context/LanguageContext";
 //loader -- read/ get data
 export const loader = async ({ request, params }) => {
     console.log("Discount Loader");
@@ -208,6 +209,7 @@ export const action = async ({ request, params }) => {
 //UI 
 export default function DiscountForm() {
     const { isNew, discount, collections } = useLoaderData();
+    const { t: { common: c, discountForm: t } } = useLanguage();
     const navigate = useNavigate();
     const fetcher = useFetcher();
     const searchFetcher = useFetcher();
@@ -237,7 +239,7 @@ export default function DiscountForm() {
 
     useEffect(() => {
         if (result?.success && !isSaving) {
-            shopify.toast.show(isNew ? "Discount saved successfully" : "Discount updated successfully");
+            shopify.toast.show(isNew ? t.savedToast : t.updatedToast);
             navigate("/app/discounts");
         } else if (result?.userErrors?.length && !isSaving) {
             shopify.toast.show(result.userErrors[0].message, { isError: true });
@@ -280,8 +282,8 @@ export default function DiscountForm() {
     };
 
     return (
-        <s-page heading={isNew ? "Create discount" : initial.code}>
-            <s-link href="/app/discounts" slot="breadcrumb-actions">Discounts</s-link>
+        <s-page heading={isNew ? t.createDiscountHeading : initial.code}>
+            <s-link href="/app/discounts" slot="breadcrumb-actions">{t.discountsBreadcrumb}</s-link>
 
             {result?.userErrors?.length > 0 && (
                 <s-banner tone="critical">
@@ -291,22 +293,22 @@ export default function DiscountForm() {
 
             <form data-save-bar data-discard-confirmation onSubmit={handleSubmit} onReset={handleDiscard}>
                 <s-stack direction="block" gap="base">
-                    <s-section heading="Amount off products">
+                    <s-section heading={t.amountOffProducts}>
                         <s-text-field
-                            label="Discount code"
+                            label={t.discountCodeLabel}
                             name="code"
                             required
-                            placeholder="e.g. SUMMER20"
-                            details="Customers must enter this code at checkout."
+                            placeholder={t.discountCodePlaceholder}
+                            details={t.discountCodeDetails}
                             value={code}
                             onInput={(event) => setCode(event.currentTarget.value)}
                         />
                     </s-section>
 
-                    <s-section heading="Discount value">
+                    <s-section heading={t.discountValue}>
                         <s-stack direction="block" gap="base">
                             <s-number-field
-                                label="Percentage"
+                                label={t.percentage}
                                 name="percentage"
                                 suffix="%"
                                 required
@@ -318,14 +320,14 @@ export default function DiscountForm() {
                             />
 
                             <s-stack direction="block" gap="small-200">
-                                <s-text>Applies to</s-text>
-                                <s-text>Specific collections</s-text>
+                                <s-text>{t.appliesTo}</s-text>
+                                <s-text>{t.specificCollections}</s-text>
                             </s-stack>
 
                             <s-search-field
-                                label="Search collections"
+                                label={t.searchCollections}
                                 labelAccessibilityVisibility="exclusive"
-                                placeholder="Search collections"
+                                placeholder={t.searchCollections}
                                 value={searchTerm}
                                 onInput={(event) => setSearchTerm(event.currentTarget.value)}
                             />
@@ -354,7 +356,7 @@ export default function DiscountForm() {
                                                 <s-stack direction="block" gap="small-200">
                                                     <s-text>{collection.title}</s-text>
                                                     {typeof collection.productsCount?.count === "number" && (
-                                                        <s-text color="subdued">{collection.productsCount.count} products</s-text>
+                                                        <s-text color="subdued">{format(t.productsCount, { count: collection.productsCount.count })}</s-text>
                                                     )}
                                                 </s-stack>
                                                 <s-button
@@ -376,8 +378,8 @@ export default function DiscountForm() {
                         </s-stack>
                     </s-section>
 
-                    <s-section heading="Eligibility">
-                        <s-text>All customers</s-text>
+                    <s-section heading={t.eligibilitySection}>
+                        <s-text>{c.allCustomers}</s-text>
                     </s-section>
                 </s-stack>
             </form>

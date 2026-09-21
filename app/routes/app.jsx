@@ -2,6 +2,7 @@ import { Outlet, useLoaderData, useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { authenticate } from "../shopify.server";
+import { LanguageProvider } from "../context/LanguageContext";
 
 export const loader = async ({ request }) => {
   await authenticate.admin(request);
@@ -22,7 +23,9 @@ export default function App() {
         <s-link href="/app/customers">Customers</s-link>
         <s-link href="/app/discounts">Discounts</s-link>
       </s-app-nav>
-      <Outlet />
+      <LanguageProvider>
+        <Outlet />
+      </LanguageProvider>
     </AppProvider>
   );
 }

@@ -1,6 +1,7 @@
 import { useLoaderData, useNavigate, useFetcher, useSearchParams } from "react-router";
 import { useEffect, useRef, useCallback, useState } from "react";
 import { authenticate } from "../shopify.server";
+import { format, useLanguage } from "../context/LanguageContext";
   
 const FILTER_QUERIES = {
     active: "status:active",
@@ -157,15 +158,16 @@ export const action = async ({ request }) => {
     return data.data.productUpdate;
 };
 
-const FILTER_LABELS = {
-    active: "Active products",
-    draft: "Draft products",
-    out_of_stock: "Out of stock products",
-    low_inventory: "Low inventory products",
-};
 //UI
 export default function Products() {
     const { products, filter, search: initialSearch, sort, order } = useLoaderData();
+    const { t: { common: c, products: t } } = useLanguage();
+    const FILTER_LABELS = {
+        active: t.filterActive,
+        draft: t.filterDraft,
+        out_of_stock: t.filterOutOfStock,
+        low_inventory: t.filterLowInventory,
+    };
     const [searchInput, setSearchInput] = useState(initialSearch);
     const [selectedIds, setSelectedIds] = useState(() => new Set());
     const [bulkStatus, setBulkStatus] = useState("ACTIVE");
@@ -299,9 +301,9 @@ export default function Products() {
     };
 
     return (
-        <s-page heading="Products">
+        <s-page heading={t.heading}>
             <s-button slot="primary-action" href="/app/products/new">
-                Add Product
+                {t.addProduct}
             </s-button>
 
             {updateResult?.userErrors?.length > 0 && (
@@ -311,7 +313,7 @@ export default function Products() {
             )}
             {updateResult?.product && (
                 <s-banner tone="success">
-                    Product title updated successfully.
+                    {t.titleUpdatedSuccess}
                 </s-banner>
             )}
             {bulkResult?.userErrors?.length > 0 && (
@@ -321,78 +323,76 @@ export default function Products() {
             )}
             {bulkResult && !bulkResult.userErrors?.length && (
                 <s-banner tone="success">
-                    Updated {bulkResult.count} product{bulkResult.count === 1 ? "" : "s"}.
+                    {format(t.updatedCount, { count: bulkResult.count, plural: bulkResult.count === 1 ? "" : "s" })}
                 </s-banner>
             )}
             {filter && FILTER_LABELS[filter] && (
                 <s-banner tone="info" dismissible>
-                    Showing: {FILTER_LABELS[filter]}. <s-link href="/app/products">Clear filter</s-link>
+                    {format(t.showing, { label: FILTER_LABELS[filter] })} <s-link href="/app/products">{t.clearFilter}</s-link>
                 </s-banner>
             )}
 
             {selectedProducts.length > 0 && (
                 <s-section padding="base">
                     <s-stack direction="inline" gap="base" alignItems="center">
-                        <s-text>{selectedProducts.length} selected</s-text>
+                        <s-text>{format(t.selectedCount, { count: selectedProducts.length })}</s-text>
                         <s-button-group>
                             <s-button commandFor="bulk-status-modal" variant="secondary">
-                                Edit status
+                                {t.editStatus}
                             </s-button>
                             <s-button commandFor="bulk-price-modal" variant="secondary">
-                                Edit price
+                                {t.editPrice}
                             </s-button>
                             <s-button variant="tertiary" onClick={() => setSelectedIds(new Set())}>
-                                Clear selection
+                                {t.clearSelection}
                             </s-button>
                         </s-button-group>
                     </s-stack>
                 </s-section>
             )}
 
-            <s-modal id="bulk-status-modal" heading="Update status">
+            <s-modal id="bulk-status-modal" heading={t.updateStatusHeading}>
                 <s-stack direction="block" gap="base">
                     <s-text>
-                        Set the status for {selectedProducts.length} selected product
-                        {selectedProducts.length === 1 ? "" : "s"}.
+                        {format(t.setStatusFor, { count: selectedProducts.length, plural: selectedProducts.length === 1 ? "" : "s" })}
                     </s-text>
                     <s-select
-                        label="Status"
+                        label={c.status}
                         name="status"
                         value={bulkStatus}
                         onChange={(event) => setBulkStatus(event.currentTarget.value)}
                     >
-                        <s-option value="ACTIVE">Active</s-option>
-                        <s-option value="DRAFT">Draft</s-option>
+                        <s-option value="ACTIVE">{c.active}</s-option>
+                        <s-option value="DRAFT">{c.draft}</s-option>
                     </s-select>
                     <s-button-group>
                         <s-button variant="primary" onClick={submitBulkStatus}>
-                            Save
+                            {c.save}
                         </s-button>
                         <s-button commandFor="bulk-status-modal" command="--hide" variant="tertiary">
-                            Cancel
+                            {c.cancel}
                         </s-button>
                     </s-button-group>
                 </s-stack>
             </s-modal>
 
-            <s-modal id="bulk-price-modal" heading="Update price">
+            <s-modal id="bulk-price-modal" heading={t.updatePriceHeading}>
                 <s-stack direction="block" gap="base">
                     <s-text>
-                        Set a new price for {selectedProducts.length} selected product
-                        {selectedProducts.length === 1 ? "" : "s"}. This updates each product&apos;s first variant.
+                        {format(t.setPriceFor, { count: selectedProducts.length, plural: selectedProducts.length === 1 ? "" : "s" })}
                     </s-text>
                     <s-money-field
-                        label="New price"
+                        label={t.newPrice}
                         name="price"
                         value={bulkPrice}
                         onChange={(event) => setBulkPrice(event.currentTarget.value)}
                     />
                     <s-button-group>
                         <s-button variant="primary" onClick={submitBulkPrice}>
-                            Save
+                            {c.save}
                         </s-button>
                         <s-button commandFor="bulk-price-modal" command="--hide" variant="tertiary">
-                            Cancel
+                            {c.cancel}
                         </s-button>
                     </s-button-group>
                 </s-stack>
@@ -407,47 +407,47 @@ export default function Products() {
                 >
                     <s-grid slot="filters" gap="small-200" gridTemplateColumns="1fr auto">
                         <s-text-field
-                            label="Search products"
+                            label={t.searchProducts}
                             labelAccessibilityVisibility="exclusive"
                             icon="search"
-                            placeholder="Search all products"
+                            placeholder={t.searchAllProducts}
                             value={searchInput}
                             onInput={(event) => setSearchInput(event.currentTarget.value)}
                         />
                         <s-button
                             icon="sort"
                             variant="secondary"
-                            accessibilityLabel="Sort"
+                            accessibilityLabel={c.sort}
                             interestFor="sort-tooltip"
                             commandFor="sort-actions"
                         />
                         <s-tooltip id="sort-tooltip">
-                            <s-text>Sort</s-text>
+                            <s-text>{c.sort}</s-text>
                         </s-tooltip>
                         <s-popover id="sort-actions">
                             <s-stack gap="none">
                                 <s-box padding="small">
                                     <s-choice-list
-                                        label="Sort by"
+                                        label={c.sortBy}
                                         onChange={(event) => updateParam("sort", event.currentTarget.values[0])}
                                     >
                                         <s-choice value="product-title" selected={sort === "product-title"}>
-                                            Product title
+                                            {t.productTitleSort}
                                         </s-choice>
-                                        <s-choice value="inventory" selected={sort === "inventory"}>Inventory</s-choice>
-                                        <s-choice value="created" selected={sort === "created"}>Created</s-choice>
+                                        <s-choice value="inventory" selected={sort === "inventory"}>{t.inventory}</s-choice>
+                                        <s-choice value="created" selected={sort === "created"}>{c.created}</s-choice>
                                     </s-choice-list>
                                 </s-box>
                                 <s-divider />
                                 <s-box padding="small">
                                     <s-choice-list
-                                        label="Order by"
+                                        label={c.orderBy}
                                         onChange={(event) => updateParam("order", event.currentTarget.values[0])}
                                     >
                                         <s-choice value="asc" selected={order === "asc"}>
-                                            A-Z
+                                            {c.aToZ}
                                         </s-choice>
-                                        <s-choice value="desc" selected={order === "desc"}>Z-A</s-choice>
+                                        <s-choice value="desc" selected={order === "desc"}>{c.zToA}</s-choice>
                                     </s-choice-list>
                                 </s-box>
                             </s-stack>
@@ -456,18 +456,18 @@ export default function Products() {
                     <s-table-header-row>
                         <s-table-header>
                             <s-checkbox
-                                accessibilityLabel="Select all products"
+                                accessibilityLabel={t.selectAllProducts}
                                 checked={allSelected}
                                 onChange={toggleAll}
                             />
                         </s-table-header>
                         <s-table-header listSlot="primary">
-                            Product
+                            {t.product}
                         </s-table-header>
-                        <s-table-header format="numeric">Inventory</s-table-header>
-                        <s-table-header>Created</s-table-header>
-                        <s-table-header listSlot="secondary">Status</s-table-header>
-                        <s-table-header>Rename</s-table-header>
+                        <s-table-header format="numeric">{t.inventory}</s-table-header>
+                        <s-table-header>{c.created}</s-table-header>
+                        <s-table-header listSlot="secondary">{c.status}</s-table-header>
+                        <s-table-header>{t.rename}</s-table-header>
                     </s-table-header-row>
 
                     <s-table-body>
@@ -506,7 +506,7 @@ export default function Products() {
                                             interestFor={`edit-tooltip-${product.id.split("/").pop()}`}
                                         />
                                         <s-tooltip id={`edit-tooltip-${product.id.split("/").pop()}`}>
-                                            <s-text>Edit</s-text>
+                                            <s-text>{c.edit}</s-text>
                                         </s-tooltip>
                                     </s-grid>
                                 </s-table-cell>
@@ -516,7 +516,7 @@ export default function Products() {
                                 </s-table-cell>
                                 <s-table-cell>
                                     <s-badge color="base" tone={product.status === "ACTIVE" ? "success" : "neutral"}>
-                                        {product.status === "ACTIVE" ? "Active" : "Draft"}
+                                        {product.status === "ACTIVE" ? c.active : c.draft}
                                     </s-badge>
                                 </s-table-cell>
                                 <s-table-cell>
@@ -529,7 +529,7 @@ export default function Products() {
                                                 name="title"
                                                 defaultValue={product.title}
                                             />
-                                            <s-button type="submit" variant="secondary">Save</s-button>
+                                            <s-button type="submit" variant="secondary">{c.save}</s-button>
                                         </s-grid>
                                     </fetcher.Form>
                                 </s-table-cell>

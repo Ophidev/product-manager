@@ -1,6 +1,7 @@
 import { useFetcher, useLoaderData, useNavigate } from "react-router";
 import { useEffect, useState } from "react";
 import { authenticate } from "../shopify.server";
+import { useLanguage } from "../context/LanguageContext";
 //languages default english
 const LANGUAGES = [
     { code: "en", name: "English" },
@@ -233,6 +234,7 @@ export const action = async ({ request, params }) => {
 //UI for the edit page
 export default function CustomerForm() {
     const { isNew, customer } = useLoaderData();
+    const { t: { customerForm: t } } = useLanguage();
     const navigate = useNavigate();
     const fetcher = useFetcher();   //api call without full page reload 
     const result = fetcher.data;
@@ -258,7 +260,7 @@ export default function CustomerForm() {
 
     useEffect(() => {
         if (result?.success && !isSaving) {
-            shopify.toast.show(isNew ? "Customer created" : "Customer updated");
+            shopify.toast.show(isNew ? t.customerCreatedToast : t.customerUpdatedToast);
             navigate("/app/customers");
         } else if (result?.userErrors?.length && !isSaving) {
             shopify.toast.show(result.userErrors[0].message, { isError: true });
@@ -317,8 +319,8 @@ export default function CustomerForm() {
     };
 
     return (
-        <s-page heading={isNew ? "Add customer" : `${customer.firstName} ${customer.lastName}`}>
-            <s-link href="/app/customers" slot="breadcrumb-actions">Customers</s-link>
+        <s-page heading={isNew ? t.addCustomerHeading : `${customer.firstName} ${customer.lastName}`}>
+            <s-link href="/app/customers" slot="breadcrumb-actions">{t.customersBreadcrumb}</s-link>
 
             {result?.userErrors?.length > 0 && (
                 <s-banner tone="critical">
@@ -328,18 +330,18 @@ export default function CustomerForm() {
 
             <form data-save-bar data-discard-confirmation onSubmit={handleSubmit} onReset={handleDiscard}>
                 <s-stack direction="block" gap="base">
-                    <s-section heading="Customer overview">
+                    <s-section heading={t.customerOverview}>
                         <s-stack direction="block" gap="base">
                             <s-grid gridTemplateColumns="1fr 1fr" gap="base">
                                 <s-text-field
-                                    label="First name"
+                                    label={t.firstName}
                                     name="firstName"
                                     required
                                     value={firstName}
                                     onInput={(event) => setFirstName(event.currentTarget.value)}
                                 />
                                 <s-text-field
-                                    label="Last name"
+                                    label={t.lastName}
                                     name="lastName"
                                     required
                                     value={lastName}
@@ -347,7 +349,7 @@ export default function CustomerForm() {
                                 />
                             </s-grid>
                             <s-select
-                                label="Language"
+                                label={t.language}
                                 name="locale"
                                 value={locale}
                                 onChange={(event) => setLocale(event.currentTarget.value)}
@@ -357,7 +359,7 @@ export default function CustomerForm() {
                                 ))}
                             </s-select>
                             <s-email-field
-                                label="Email"
+                                label={t.email}
                                 name="email"
                                 required
                                 value={email}
@@ -365,7 +367,7 @@ export default function CustomerForm() {
                             />
                             <s-grid gridTemplateColumns="160px 1fr" gap="base">
                                 <s-select
-                                    label="Country code"
+                                    label={t.countryCode}
                                     name="dialCode"
                                     value={dialCode}
                                     onChange={(event) => setDialCode(event.currentTarget.value)}
@@ -375,9 +377,9 @@ export default function CustomerForm() {
                                     ))}
                                 </s-select>
                                 <s-text-field
-                                    label="Phone number"
+                                    label={t.phoneNumber}
                                     name="phoneNumber"
-                                    placeholder="e.g. 5551234567"
+                                    placeholder={t.phoneNumberPlaceholder}
                                     value={phoneNumber}
                                     onInput={(event) => setPhoneNumber(event.currentTarget.value)}
                                 />
@@ -385,29 +387,29 @@ export default function CustomerForm() {
                         </s-stack>
                     </s-section>
 
-                    <s-section heading="Default address">
+                    <s-section heading={t.defaultAddress}>
                         <s-stack direction="block" gap="base">
                             <s-text-field
-                                label="Address line 1"
+                                label={t.addressLine1}
                                 name="address1"
                                 value={address1}
                                 onInput={(event) => setAddress1(event.currentTarget.value)}
                             />
                             <s-text-field
-                                label="Address line 2"
+                                label={t.addressLine2}
                                 name="address2"
                                 value={address2}
                                 onInput={(event) => setAddress2(event.currentTarget.value)}
                             />
                             <s-grid gridTemplateColumns="1fr 1fr" gap="base">
                                 <s-text-field
-                                    label="City"
+                                    label={t.city}
                                     name="city"
                                     value={city}
                                     onInput={(event) => setCity(event.currentTarget.value)}
                                 />
                                 <s-text-field
-                                    label="State/Province"
+                                    label={t.stateProvince}
                                     name="state"
                                     value={state}
                                     onInput={(event) => setState(event.currentTarget.value)}
@@ -415,26 +417,26 @@ export default function CustomerForm() {
                             </s-grid>
                             <s-grid gridTemplateColumns="1fr 1fr" gap="base">
                                 <s-select
-                                    label="Country"
+                                    label={t.country}
                                     name="country"
-                                    placeholder="Select a country"
+                                    placeholder={t.selectCountry}
                                     value={country}
                                     onChange={(event) => setCountry(event.currentTarget.value)}
                                 >
-                                    <s-option value="">Select a country</s-option>
+                                    <s-option value="">{t.selectCountry}</s-option>
                                     {COUNTRIES.map((entry) => (
                                         <s-option key={entry.code} value={entry.code}>{entry.name}</s-option>
                                     ))}
                                 </s-select>
                                 <s-text-field
-                                    label="Postal code"
+                                    label={t.postalCode}
                                     name="postalCode"
                                     value={postalCode}
                                     onInput={(event) => setPostalCode(event.currentTarget.value)}
                                 />
                             </s-grid>
                             <s-text-field
-                                label="Phone"
+                                label={t.phone}
                                 name="addressPhone"
                                 value={addressPhone}
                                 onInput={(event) => setAddressPhone(event.currentTarget.value)}
