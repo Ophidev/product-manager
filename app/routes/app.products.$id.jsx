@@ -1,5 +1,6 @@
 import { useFetcher, useLoaderData, useNavigate } from "react-router";
 import { useEffect, useState } from "react";
+import { randomUUID } from "node:crypto";
 import { authenticate } from "../shopify.server";
 import { useLanguage } from "../context/LanguageContext";
 
@@ -277,12 +278,12 @@ export const action = async ({ request, params }) => {
             return { userErrors: result.userErrors };
         }
     }
-// graphql mutation for the inventory
+// graphql mutation for the inventory error 
     if (inventoryQuantity !== initial.inventory) {
         const response = await admin.graphql(`
             # Set inventory for the product.
             mutation SetInventory($input: InventorySetQuantitiesInput!) {
-                inventorySetQuantities(input: $input) {
+                inventorySetQuantities(input: $input) @idempotent(key: "${randomUUID()}") {  
                     inventoryAdjustmentGroup { reason }
                     userErrors { code field message }
                 }
@@ -292,7 +293,12 @@ export const action = async ({ request, params }) => {
                 input: {
                     name: "available",
                     reason: "correction",
-                    quantities: [{ inventoryItemId, locationId, quantity: inventoryQuantity }],
+                    quantities: [{
+                        inventoryItemId,
+                        locationId,
+                        quantity: inventoryQuantity,
+                        changeFromQuantity: initial.inventory,
+                    }],
                 },
             },
         });

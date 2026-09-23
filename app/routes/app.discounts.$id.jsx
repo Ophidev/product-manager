@@ -1,7 +1,8 @@
 import { useFetcher, useLoaderData, useNavigate } from "react-router";
 import { useEffect, useState } from "react";
 import { authenticate } from "../shopify.server";
-import { format, useLanguage } from "../context/LanguageContext";
+import { useLanguage } from "../context/LanguageContext";
+import { format } from "../context/languageData";
 //loader -- read/ get data
 export const loader = async ({ request, params }) => {
     console.log("Discount Loader");

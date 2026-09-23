@@ -70,6 +70,13 @@ export default function Dashboard() {
         <s-page heading={t.dashboardHeading}>
             <LanguageSelector />
 
+            <s-section heading={t.introTitle} padding="base">
+                <s-stack direction="block" gap="small-200">
+                    <s-text color="subdued">{t.introDescription}</s-text>
+                    <s-text type="strong" tone="success">{t.introTagline}</s-text>
+                </s-stack>
+            </s-section>
+
             <s-section heading={t.catalogOverview}>
                 <s-grid gridTemplateColumns="repeat(5, 1fr)" gap="base">
                     <StatTile label={t.totalProducts} value={stats.total.count} filter={null} tone="neutral" />

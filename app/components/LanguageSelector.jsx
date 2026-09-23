@@ -1,4 +1,5 @@
-import { LANGUAGES, useLanguage } from "../context/LanguageContext";
+import { useLanguage } from "../context/LanguageContext";
+import { LANGUAGES } from "../context/languageData";
 //inporting the languages from the languageContext 
 const MENU_ID = "language-selector-menu"; //this will help to take the command from the UI to present the list of language to choose
 

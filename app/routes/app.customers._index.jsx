@@ -1,5 +1,5 @@
 import { useLoaderData, useNavigate, useFetcher, useSearchParams } from "react-router";
-import { useEffect, useCallback, useState, useRef } from "react";
+import { useEffect, useCallback, useState } from "react";
 import { authenticate } from "../shopify.server";
 import { useLanguage } from "../context/LanguageContext";
 //allows to sort the customer by name and created at
@@ -293,7 +293,6 @@ export default function Customers() {
     const isImporting = importFetcher.state !== "idle";
     const [importFile, setImportFile] = useState(null);
     const [importRows, setImportRows] = useState(null);
-    const fileInputRef = useRef(null);
 
     const updateParam = useCallback((key, value) => {
         const params = new URLSearchParams(searchParams);
@@ -463,29 +462,17 @@ export default function Customers() {
 
             <s-modal id="import-customers-modal" heading={t.importCsvHeading}>
                 <s-stack direction="block" gap="base">
-                    <s-box
-                        padding="large"
-                        borderStyle="dashed"
-                        borderWidth="base"
-                        borderRadius="base"
-                        borderColor="subdued"
+                    <s-drop-zone
+                        label={t.addFiles}
+                        labelAccessibilityVisibility="exclusive"
+                        accessibilityLabel={t.addFiles}
+                        accept=".csv"
+                        onChange={handleFileSelected}
                     >
-                        <s-stack direction="block" gap="base" alignItems="center">
-                            <input
-                                ref={fileInputRef}
-                                type="file"
-                                accept=".csv"
-                                style={{ display: "none" }}
-                                onChange={handleFileSelected}
-                            />
-                            <s-button variant="secondary" onClick={() => fileInputRef.current?.click()}>
-                                {t.addFiles}
-                            </s-button>
-                            <s-text color="subdued">
-                                {importFile ? importFile.name : t.acceptsCsv}
-                            </s-text>
-                        </s-stack>
-                    </s-box>
+                        {importFile && (
+                            <s-text color="subdued">{importFile.name}</s-text>
+                        )}
+                    </s-drop-zone>
                     <s-link onClick={handleDownloadSample}>
                         {t.downloadSample}
                     </s-link>
@@ -639,7 +626,7 @@ export default function Customers() {
                                             <s-text>{t.updateCustomer}</s-text>
                                         </s-tooltip>
                                         <s-button
-                                            icon="menu-vertical"
+                                            icon="menu-horizontal"
                                             variant="tertiary"
                                             accessibilityLabel="More actions"
                                             commandFor={menuId}

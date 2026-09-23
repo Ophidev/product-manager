@@ -1,7 +1,8 @@
 import { useLoaderData, useNavigate, useFetcher, useSearchParams } from "react-router";
-import { useEffect, useRef, useCallback, useState } from "react";
+import { useEffect, useRef, useCallback, useState, useMemo } from "react";
 import { authenticate } from "../shopify.server";
-import { format, useLanguage } from "../context/LanguageContext";
+import { useLanguage } from "../context/LanguageContext";
+import { format } from "../context/languageData";
   
 const FILTER_QUERIES = {
     active: "status:active",
@@ -22,6 +23,8 @@ const PRODUCT_FIELDS = `
     status
     totalInventory
     createdAt
+    updatedAt
+    tags
     featuredImage { url altText }
     variants(first: 1) { nodes { id price } }
 `;
@@ -58,6 +61,7 @@ export const loader = async ({ request }) => {
         response = await admin.graphql(`
             #graphql
             query GetProducts($last: Int!, $before: String!, $query: String, $sortKey: ProductSortKeys, $reverse: Boolean) {
+                shop { currencyCode }
                 products(last: $last, before: $before, query: $query, sortKey: $sortKey, reverse: $reverse) {
                     nodes { ${PRODUCT_FIELDS} }
                     pageInfo { hasNextPage hasPreviousPage startCursor endCursor }
@@ -68,6 +72,7 @@ export const loader = async ({ request }) => {
         response = await admin.graphql(`
             #graphql
             query GetProducts($first: Int!, $after: String!, $query: String, $sortKey: ProductSortKeys, $reverse: Boolean) {
+                shop { currencyCode }
                 products(first: $first, after: $after, query: $query, sortKey: $sortKey, reverse: $reverse) {
                     nodes { ${PRODUCT_FIELDS} }
                     pageInfo { hasNextPage hasPreviousPage startCursor endCursor }
@@ -78,6 +83,7 @@ export const loader = async ({ request }) => {
         response = await admin.graphql(`
             #graphql
             query GetProducts($first: Int!, $query: String, $sortKey: ProductSortKeys, $reverse: Boolean) {
+                shop { currencyCode }
                 products(first: $first, query: $query, sortKey: $sortKey, reverse: $reverse) {
                     nodes { ${PRODUCT_FIELDS} }
                     pageInfo { hasNextPage hasPreviousPage startCursor endCursor }
@@ -93,8 +99,8 @@ export const loader = async ({ request }) => {
 export const action = async ({ request }) => {
     const { admin } = await authenticate.admin(request);
     const formData = await request.formData();
-    const intent = formData.get("intent") ?? "updateTitle";
-
+    const intent = formData.get("intent");
+//action bulk status
     if (intent === "bulkStatus") {
         const status = formData.get("status");
         const items = JSON.parse(formData.get("items") || "[]");
@@ -117,13 +123,17 @@ export const action = async ({ request }) => {
         const userErrors = results.flatMap((result) => result.userErrors ?? []);
         return { bulk: "status", count: items.length, userErrors };
     }
-
+// aciton bulk price 
     if (intent === "bulkPrice") {
-        const price = formData.get("price");
+        const mode = formData.get("mode") ?? "set";
+        const value = Number(formData.get("value"));
         const items = JSON.parse(formData.get("items") || "[]");
 
         const results = await Promise.all(
-            items.map(async ({ id, variantId }) => {
+            items.map(async ({ id, variantId, price }) => {
+                const newPrice = mode === "percent"
+                    ? (Number(price) * (1 + value / 100)).toFixed(2)
+                    : value.toFixed(2);
                 const response = await admin.graphql(`
                     #graphql
                     mutation BulkUpdatePrice($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
@@ -132,7 +142,7 @@ export const action = async ({ request }) => {
                             userErrors { field message }
                         }
                     }
-                `, { variables: { productId: id, variants: [{ id: variantId, price }] } });
+                `, { variables: { productId: id, variants: [{ id: variantId, price: newPrice }] } });
                 return (await response.json()).data.productVariantsBulkUpdate;
             }),
         );
@@ -140,28 +150,66 @@ export const action = async ({ request }) => {
         const userErrors = results.flatMap((result) => result.userErrors ?? []);
         return { bulk: "price", count: items.length, userErrors };
     }
+//action bulk tags
+    if (intent === "bulkTags") {
+        const tags = (formData.get("tags") || "")
+            .split(",")
+            .map((tag) => tag.trim())
+            .filter(Boolean);
+        const items = JSON.parse(formData.get("items") || "[]");
 
-    const productId = formData.get("productId");
-    const title = formData.get("title");
+        const results = await Promise.all(
+            items.map(async ({ id }) => {
+                const response = await admin.graphql(`
+                    #graphql
+                    mutation BulkUpdateTags($product: ProductUpdateInput!) {
+                        productUpdate(product: $product) {
+                            product { id tags }
+                            userErrors { field message }
+                        }
+                    }
+                `, { variables: { product: { id, tags } } });
+                return (await response.json()).data.productUpdate;
+            }),
+        );
 
-    const response = await admin.graphql(`
-        #graphql
-        mutation UpdateProductTitle($product: ProductUpdateInput!) {
-            productUpdate(product: $product) {
-                product { id title }
-                userErrors { field message }
-            }
-        }
-    `, { variables: { product: { id: productId, title } } });
+        const userErrors = results.flatMap((result) => result.userErrors ?? []);
+        return { bulk: "tags", count: items.length, userErrors };
+    }
+//action bulk delete
+    if (intent === "bulkDelete") {
+        const items = JSON.parse(formData.get("items") || "[]");
 
-    const data = await response.json();
-    return data.data.productUpdate;
+        const results = await Promise.all(
+            items.map(async ({ id }) => {
+                const response = await admin.graphql(`
+                    #graphql
+                    mutation BulkDeleteProduct($input: ProductDeleteInput!) {
+                        productDelete(input: $input) {
+                            deletedProductId
+                            userErrors { field message }
+                        }
+                    }
+                `, { variables: { input: { id } } });
+                return (await response.json()).data.productDelete;
+            }),
+        );
+
+        const userErrors = results.flatMap((result) => result.userErrors ?? []);
+        return { bulk: "delete", count: items.length, userErrors };
+    }
+
+    return null;
 };
 
 //UI
 export default function Products() {
-    const { products, filter, search: initialSearch, sort, order } = useLoaderData();
+    const { products, shop, filter, search: initialSearch, sort, order } = useLoaderData();
     const { t: { common: c, products: t } } = useLanguage();
+    const currencyFormatter = useMemo(
+        () => new Intl.NumberFormat(undefined, { style: "currency", currency: shop?.currencyCode ?? "USD" }),
+        [shop?.currencyCode],
+    );
     const FILTER_LABELS = {
         active: t.filterActive,
         draft: t.filterDraft,
@@ -169,17 +217,17 @@ export default function Products() {
         low_inventory: t.filterLowInventory,
     };
     const [searchInput, setSearchInput] = useState(initialSearch);
-    const [selectedIds, setSelectedIds] = useState(() => new Set());
+    const [selectedProductsMap, setSelectedProductsMap] = useState(() => new Map());   //map used 
     const [bulkStatus, setBulkStatus] = useState("ACTIVE");
+    const [bulkPriceMode, setBulkPriceMode] = useState("set");
     const [bulkPrice, setBulkPrice] = useState("");
+    const [bulkTags, setBulkTags] = useState("");
 
-    const fetcher = useFetcher();
     const bulkFetcher = useFetcher();
 
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const tableRef = useRef(null);
-    const updateResult = fetcher.data;
     const bulkResult = bulkFetcher.data;
 //using of search in index table for finding the product on all pages by searchparams 
     const handleNextPage = useCallback(() => {
@@ -225,33 +273,41 @@ export default function Products() {
     }, [searchInput]);
 
     const filteredProducts = products.nodes;
-    //selects the only products which are selected by the user
-    const selectedProducts = filteredProducts
-    //selected ID has the particular ID or not 
-        .filter((product) => selectedIds.has(product.id))
-        //converting to object
-        .map((product) => ({
-            id: product.id,
-            variantId: product.variants?.nodes?.[0]?.id,
-        }));
+    //selected products, tracked across pages (keyed by id) so selections survive pagination
+    const selectedProducts = Array.from(selectedProductsMap.values());   //selected product 
 
-    const allSelected = filteredProducts.length > 0 && selectedProducts.length === filteredProducts.length;
-
+    const allSelected = filteredProducts.length > 0
+        && filteredProducts.every((product) => selectedProductsMap.has(product.id));
+//set selected product 
     const toggleAll = () => {
-        if (allSelected) {
-            setSelectedIds(new Set());
-        } else {
-            setSelectedIds(new Set(filteredProducts.map((product) => product.id)));
-        }
+        setSelectedProductsMap((current) => {
+            const next = new Map(current);
+            if (allSelected) {
+                filteredProducts.forEach((product) => next.delete(product.id));
+            } else {
+                filteredProducts.forEach((product) => {
+                    next.set(product.id, {
+                        id: product.id,
+                        variantId: product.variants?.nodes?.[0]?.id,
+                        price: product.variants?.nodes?.[0]?.price,
+                    });
+                });
+            }
+            return next;
+        });
     };
 
-    const toggleRow = (id) => {
-        setSelectedIds((current) => {
-            const next = new Set(current);
-            if (next.has(id)) {
-                next.delete(id);
+    const toggleRow = (product) => {
+        setSelectedProductsMap((current) => {
+            const next = new Map(current);
+            if (next.has(product.id)) {
+                next.delete(product.id);
             } else {
-                next.add(id);
+                next.set(product.id, {
+                    id: product.id,
+                    variantId: product.variants?.nodes?.[0]?.id,
+                    price: product.variants?.nodes?.[0]?.price,
+                });
             }
             return next;
         });
@@ -271,11 +327,21 @@ export default function Products() {
     }, [handleNextPage, handlePreviousPage]);
 
     useEffect(() => {
-        if (bulkFetcher.state === "idle" && bulkResult && !bulkResult.userErrors?.length) {
-            setSelectedIds(new Set());
-        }
-    }, [bulkFetcher.state, bulkResult]);
+        if (bulkFetcher.state !== "idle" || !bulkResult) return;
 
+        if (bulkResult.userErrors?.length) {
+            shopify.toast.show(bulkResult.userErrors[0].message, { isError: true, duration: 3000 });
+            return;
+        }
+
+        setSelectedProductsMap(new Map());
+        const plural = bulkResult.count === 1 ? "" : "s";
+        const message = bulkResult.bulk === "delete"
+            ? format(t.deletedCount, { count: bulkResult.count, plural })
+            : format(t.updatedCount, { count: bulkResult.count, plural });
+        shopify.toast.show(message, { duration: 3000 });
+    }, [bulkFetcher.state, bulkResult]);
+//bulk edit status
     const submitBulkStatus = (event) => {
         event.preventDefault();
         bulkFetcher.submit(
@@ -287,13 +353,37 @@ export default function Products() {
             { method: "post" },
         );
     };
-
+//bulk edit price
     const submitBulkPrice = (event) => {
         event.preventDefault();
         bulkFetcher.submit(
             {
                 intent: "bulkPrice",
-                price: bulkPrice,
+                mode: bulkPriceMode,
+                value: bulkPrice,
+                items: JSON.stringify(selectedProducts),
+            },
+            { method: "post" },
+        );
+    };
+//bulk delete tags
+    const submitBulkTags = (event) => {
+        event.preventDefault();
+        bulkFetcher.submit(
+            {
+                intent: "bulkTags",
+                tags: bulkTags,
+                items: JSON.stringify(selectedProducts),
+            },
+            { method: "post" },
+        );
+    };
+//bulkdelete
+    const submitBulkDelete = (event) => {
+        event.preventDefault();
+        bulkFetcher.submit(
+            {
+                intent: "bulkDelete",
                 items: JSON.stringify(selectedProducts),
             },
             { method: "post" },
@@ -306,96 +396,106 @@ export default function Products() {
                 {t.addProduct}
             </s-button>
 
-            {updateResult?.userErrors?.length > 0 && (
-                <s-banner tone="critical">
-                    {updateResult.userErrors[0].message}
-                </s-banner>
-            )}
-            {updateResult?.product && (
-                <s-banner tone="success">
-                    {t.titleUpdatedSuccess}
-                </s-banner>
-            )}
-            {bulkResult?.userErrors?.length > 0 && (
-                <s-banner tone="critical">
-                    {bulkResult.userErrors[0].message}
-                </s-banner>
-            )}
-            {bulkResult && !bulkResult.userErrors?.length && (
-                <s-banner tone="success">
-                    {format(t.updatedCount, { count: bulkResult.count, plural: bulkResult.count === 1 ? "" : "s" })}
-                </s-banner>
-            )}
             {filter && FILTER_LABELS[filter] && (
                 <s-banner tone="info" dismissible>
                     {format(t.showing, { label: FILTER_LABELS[filter] })} <s-link href="/app/products">{t.clearFilter}</s-link>
                 </s-banner>
             )}
 
-            {selectedProducts.length > 0 && (
-                <s-section padding="base">
-                    <s-stack direction="inline" gap="base" alignItems="center">
-                        <s-text>{format(t.selectedCount, { count: selectedProducts.length })}</s-text>
-                        <s-button-group>
-                            <s-button commandFor="bulk-status-modal" variant="secondary">
-                                {t.editStatus}
-                            </s-button>
-                            <s-button commandFor="bulk-price-modal" variant="secondary">
-                                {t.editPrice}
-                            </s-button>
-                            <s-button variant="tertiary" onClick={() => setSelectedIds(new Set())}>
-                                {t.clearSelection}
-                            </s-button>
-                        </s-button-group>
-                    </s-stack>
-                </s-section>
-            )}
+            <s-modal id="bulk-price-modal" heading={t.updatePriceHeading}>
+                <s-stack direction="block" gap="base">
+                    <s-text>
+                        {format(t.setPriceFor, { count: selectedProducts.length, plural: selectedProducts.length === 1 ? "" : "s" })}
+                    </s-text>
+                    <s-choice-list
+                        label={t.priceUpdateMethod}
+                        labelAccessibilityVisibility="exclusive"
+                        onChange={(event) => setBulkPriceMode(event.currentTarget.values[0])}
+                    >
+                        <s-choice value="set" selected={bulkPriceMode === "set"}>{t.setNewPrice}</s-choice>
+                        <s-choice value="percent" selected={bulkPriceMode === "percent"}>{t.adjustByPercent}</s-choice>
+                    </s-choice-list>
+                    {bulkPriceMode === "percent" ? (
+                        <s-number-field
+                            label={t.percentLabel}
+                            name="value"
+                            value={bulkPrice}
+                            onChange={(event) => setBulkPrice(event.currentTarget.value)}
+                        />
+                    ) : (
+                        <s-money-field
+                            label={t.newPrice}
+                            name="value"
+                            value={bulkPrice}
+                            onChange={(event) => setBulkPrice(event.currentTarget.value)}
+                        />
+                    )}
+                </s-stack>
+                <s-button slot="primary-action" variant="primary" commandFor="bulk-price-modal" command="--hide" onClick={submitBulkPrice}>
+                    {c.save}
+                </s-button>
+                <s-button slot="secondary-actions" variant="secondary" commandFor="bulk-price-modal" command="--hide">
+                    {c.cancel}
+                </s-button>
+            </s-modal>
 
             <s-modal id="bulk-status-modal" heading={t.updateStatusHeading}>
                 <s-stack direction="block" gap="base">
                     <s-text>
                         {format(t.setStatusFor, { count: selectedProducts.length, plural: selectedProducts.length === 1 ? "" : "s" })}
                     </s-text>
-                    <s-select
+                    <s-choice-list
                         label={c.status}
-                        name="status"
-                        value={bulkStatus}
-                        onChange={(event) => setBulkStatus(event.currentTarget.value)}
+                        labelAccessibilityVisibility="exclusive"
+                        onChange={(event) => setBulkStatus(event.currentTarget.values[0])}
                     >
-                        <s-option value="ACTIVE">{c.active}</s-option>
-                        <s-option value="DRAFT">{c.draft}</s-option>
-                    </s-select>
-                    <s-button-group>
-                        <s-button variant="primary" onClick={submitBulkStatus}>
-                            {c.save}
-                        </s-button>
-                        <s-button commandFor="bulk-status-modal" command="--hide" variant="tertiary">
-                            {c.cancel}
-                        </s-button>
-                    </s-button-group>
+                        <s-choice value="ACTIVE" selected={bulkStatus === "ACTIVE"}>{c.active}</s-choice>
+                        <s-choice value="DRAFT" selected={bulkStatus === "DRAFT"}>{c.draft}</s-choice>
+                        <s-choice value="ARCHIVED" selected={bulkStatus === "ARCHIVED"}>{c.archived}</s-choice>
+                    </s-choice-list>
                 </s-stack>
+                <s-button slot="primary-action" variant="primary" commandFor="bulk-status-modal" command="--hide" onClick={submitBulkStatus}>
+                    {c.save}
+                </s-button>
+                <s-button slot="secondary-actions" variant="secondary" commandFor="bulk-status-modal" command="--hide">
+                    {c.cancel}
+                </s-button>
             </s-modal>
 
-            <s-modal id="bulk-price-modal" heading={t.updatePriceHeading}>
+            <s-modal id="bulk-tags-modal" heading={t.updateTagsHeading}>
                 <s-stack direction="block" gap="base">
                     <s-text>
-                        {format(t.setPriceFor, { count: selectedProducts.length, plural: selectedProducts.length === 1 ? "" : "s" })}
+                        {format(t.setTagsFor, { count: selectedProducts.length, plural: selectedProducts.length === 1 ? "" : "s" })}
                     </s-text>
-                    <s-money-field
-                        label={t.newPrice}
-                        name="price"
-                        value={bulkPrice}
-                        onChange={(event) => setBulkPrice(event.currentTarget.value)}
+                    <s-text-field
+                        label={t.tagsLabel}
+                        labelAccessibilityVisibility="exclusive"
+                        name="tags"
+                        placeholder={t.tagsPlaceholder}
+                        value={bulkTags}
+                        onInput={(event) => setBulkTags(event.currentTarget.value)}
                     />
-                    <s-button-group>
-                        <s-button variant="primary" onClick={submitBulkPrice}>
-                            {c.save}
-                        </s-button>
-                        <s-button commandFor="bulk-price-modal" command="--hide" variant="tertiary">
-                            {c.cancel}
-                        </s-button>
-                    </s-button-group>
                 </s-stack>
+                <s-button slot="primary-action" variant="primary" commandFor="bulk-tags-modal" command="--hide" onClick={submitBulkTags}>
+                    {c.save}
+                </s-button>
+                <s-button slot="secondary-actions" variant="secondary" commandFor="bulk-tags-modal" command="--hide">
+                    {c.cancel}
+                </s-button>
+            </s-modal>
+
+            <s-modal id="bulk-delete-modal" heading={t.deleteHeading}>
+                <s-stack direction="block" gap="base">
+                    <s-text>
+                        {format(t.deleteConfirm, { count: selectedProducts.length, plural: selectedProducts.length === 1 ? "" : "s" })}
+                    </s-text>
+                </s-stack>
+                <s-button slot="primary-action" variant="primary" tone="critical" commandFor="bulk-delete-modal" command="--hide" onClick={submitBulkDelete}>
+                    {c.delete}
+                </s-button>
+                <s-button slot="secondary-actions" variant="secondary" commandFor="bulk-delete-modal" command="--hide">
+                    {c.cancel}
+                </s-button>
             </s-modal>
 
             <s-section padding="none" accessibilityLabel="Products table section">
@@ -405,54 +505,81 @@ export default function Products() {
                     hasNextPage={products.pageInfo.hasNextPage}
                     hasPreviousPage={products.pageInfo.hasPreviousPage}
                 >
-                    <s-grid slot="filters" gap="small-200" gridTemplateColumns="1fr auto">
-                        <s-text-field
-                            label={t.searchProducts}
-                            labelAccessibilityVisibility="exclusive"
-                            icon="search"
-                            placeholder={t.searchAllProducts}
-                            value={searchInput}
-                            onInput={(event) => setSearchInput(event.currentTarget.value)}
-                        />
-                        <s-button
-                            icon="sort"
-                            variant="secondary"
-                            accessibilityLabel={c.sort}
-                            interestFor="sort-tooltip"
-                            commandFor="sort-actions"
-                        />
-                        <s-tooltip id="sort-tooltip">
-                            <s-text>{c.sort}</s-text>
-                        </s-tooltip>
-                        <s-popover id="sort-actions">
-                            <s-stack gap="none">
-                                <s-box padding="small">
-                                    <s-choice-list
-                                        label={c.sortBy}
-                                        onChange={(event) => updateParam("sort", event.currentTarget.values[0])}
-                                    >
-                                        <s-choice value="product-title" selected={sort === "product-title"}>
-                                            {t.productTitleSort}
-                                        </s-choice>
-                                        <s-choice value="inventory" selected={sort === "inventory"}>{t.inventory}</s-choice>
-                                        <s-choice value="created" selected={sort === "created"}>{c.created}</s-choice>
-                                    </s-choice-list>
-                                </s-box>
-                                <s-divider />
-                                <s-box padding="small">
-                                    <s-choice-list
-                                        label={c.orderBy}
-                                        onChange={(event) => updateParam("order", event.currentTarget.values[0])}
-                                    >
-                                        <s-choice value="asc" selected={order === "asc"}>
-                                            {c.aToZ}
-                                        </s-choice>
-                                        <s-choice value="desc" selected={order === "desc"}>{c.zToA}</s-choice>
-                                    </s-choice-list>
-                                </s-box>
-                            </s-stack>
-                        </s-popover>
-                    </s-grid>
+                    <s-stack slot="filters" direction="block" gap="none">
+                        {selectedProducts.length > 0 && (
+                            <s-box
+                                padding="small"
+                                background="strong"
+                                borderRadius="base base none none"
+                            >
+                                <s-stack direction="inline" gap="base" alignItems="center" justifyContent="space-between">
+                                    <s-text>{format(t.selectedCount, { count: selectedProducts.length })}</s-text>
+                                    <s-stack direction="inline" gap="small">
+                                        <s-button commandFor="bulk-price-modal" variant="secondary">
+                                            {t.editPrice}
+                                        </s-button>
+                                        <s-button commandFor="bulk-status-modal" variant="secondary">
+                                            {t.editStatus}
+                                        </s-button>
+                                        <s-button commandFor="bulk-tags-modal" variant="secondary">
+                                            {t.editTags}
+                                        </s-button>
+                                        <s-button commandFor="bulk-delete-modal" variant="secondary" tone="critical">
+                                            {c.delete}
+                                        </s-button>
+                                    </s-stack>
+                                </s-stack>
+                            </s-box>
+                        )}
+                        <s-grid gap="small-200" gridTemplateColumns="1fr auto">
+                            <s-text-field
+                                label={t.searchProducts}
+                                labelAccessibilityVisibility="exclusive"
+                                icon="search"
+                                placeholder={t.searchAllProducts}
+                                value={searchInput}
+                                onInput={(event) => setSearchInput(event.currentTarget.value)}
+                            />
+                            <s-button
+                                icon="sort"
+                                variant="secondary"
+                                accessibilityLabel={c.sort}
+                                interestFor="sort-tooltip"
+                                commandFor="sort-actions"
+                            />
+                            <s-tooltip id="sort-tooltip">
+                                <s-text>{c.sort}</s-text>
+                            </s-tooltip>
+                            <s-popover id="sort-actions">
+                                <s-stack gap="none">
+                                    <s-box padding="small">
+                                        <s-choice-list
+                                            label={c.sortBy}
+                                            onChange={(event) => updateParam("sort", event.currentTarget.values[0])}
+                                        >
+                                            <s-choice value="product-title" selected={sort === "product-title"}>
+                                                {t.productTitleSort}
+                                            </s-choice>
+                                            <s-choice value="inventory" selected={sort === "inventory"}>{t.inventory}</s-choice>
+                                            <s-choice value="created" selected={sort === "created"}>{c.created}</s-choice>
+                                        </s-choice-list>
+                                    </s-box>
+                                    <s-divider />
+                                    <s-box padding="small">
+                                        <s-choice-list
+                                            label={c.orderBy}
+                                            onChange={(event) => updateParam("order", event.currentTarget.values[0])}
+                                        >
+                                            <s-choice value="asc" selected={order === "asc"}>
+                                                {c.aToZ}
+                                            </s-choice>
+                                            <s-choice value="desc" selected={order === "desc"}>{c.zToA}</s-choice>
+                                        </s-choice-list>
+                                    </s-box>
+                                </s-stack>
+                            </s-popover>
+                        </s-grid>
+                    </s-stack>
                     <s-table-header-row>
                         <s-table-header>
                             <s-checkbox
@@ -465,9 +592,10 @@ export default function Products() {
                             {t.product}
                         </s-table-header>
                         <s-table-header format="numeric">{t.inventory}</s-table-header>
-                        <s-table-header>{c.created}</s-table-header>
                         <s-table-header listSlot="secondary">{c.status}</s-table-header>
-                        <s-table-header>{t.rename}</s-table-header>
+                        <s-table-header format="numeric">{t.price}</s-table-header>
+                        <s-table-header>{t.updated}</s-table-header>
+                        <s-table-header>{c.action}</s-table-header>
                     </s-table-header-row>
 
                     <s-table-body>
@@ -476,12 +604,12 @@ export default function Products() {
                                 <s-table-cell>
                                     <s-checkbox
                                         accessibilityLabel={`Select ${product.title}`}
-                                        checked={selectedIds.has(product.id)}
-                                        onChange={() => toggleRow(product.id)}
+                                        checked={selectedProductsMap.has(product.id)}
+                                        onChange={() => toggleRow(product)}
                                     />
                                 </s-table-cell>
                                 <s-table-cell>
-                                    <s-grid gridTemplateColumns="40px 1fr auto" gap="small" alignItems="center">
+                                    <s-grid gridTemplateColumns="40px 1fr" gap="small" alignItems="center">
                                         <s-box
                                             border="base"
                                             borderRadius="base"
@@ -498,40 +626,48 @@ export default function Products() {
                                             ) : null}
                                         </s-box>
                                         <s-text>{product.title}</s-text>
-                                        <s-button
-                                            icon="edit"
-                                            variant="tertiary"
-                                            href={`/app/products/${product.id.split("/").pop()}`}
-                                            accessibilityLabel={`Edit ${product.title}`}
-                                            interestFor={`edit-tooltip-${product.id.split("/").pop()}`}
-                                        />
-                                        <s-tooltip id={`edit-tooltip-${product.id.split("/").pop()}`}>
-                                            <s-text>{c.edit}</s-text>
-                                        </s-tooltip>
                                     </s-grid>
                                 </s-table-cell>
-                                <s-table-cell>{product.totalInventory ?? 0}</s-table-cell>
                                 <s-table-cell>
-                                    {new Date(product.createdAt).toLocaleDateString()}
+                                    <s-text tone={product.totalInventory > 0 ? "auto" : "critical"}>
+                                        {product.totalInventory > 0
+                                            ? format(t.inStock, { count: product.totalInventory })
+                                            : t.outOfStock}
+                                    </s-text>
                                 </s-table-cell>
                                 <s-table-cell>
-                                    <s-badge color="base" tone={product.status === "ACTIVE" ? "success" : "neutral"}>
-                                        {product.status === "ACTIVE" ? c.active : c.draft}
+                                    <s-badge
+                                        color="base"
+                                        tone={
+                                            product.status === "ACTIVE"
+                                                ? "success"
+                                                : product.status === "DRAFT"
+                                                    ? "neutral"
+                                                    : "neutral"
+                                        }
+                                    >
+                                        {product.status === "ACTIVE" ? c.active : product.status === "DRAFT" ? c.draft : c.archived}
                                     </s-badge>
                                 </s-table-cell>
                                 <s-table-cell>
-                                    <fetcher.Form method="post">
-                                        <s-grid gridTemplateColumns="minmax(180px, 1fr) auto" gap="small" alignItems="center">
-                                            <input type="hidden" name="productId" value={product.id} />
-                                            <s-text-field
-                                                label={`Title for ${product.title}`}
-                                                labelAccessibilityVisibility="exclusive"
-                                                name="title"
-                                                defaultValue={product.title}
-                                            />
-                                            <s-button type="submit" variant="secondary">{c.save}</s-button>
-                                        </s-grid>
-                                    </fetcher.Form>
+                                    {product.variants?.nodes?.[0]?.price != null
+                                        ? currencyFormatter.format(Number(product.variants.nodes[0].price))
+                                        : "—"}
+                                </s-table-cell>
+                                <s-table-cell>
+                                    {new Date(product.updatedAt).toLocaleDateString()}
+                                </s-table-cell>
+                                <s-table-cell>
+                                    <s-button
+                                        icon="edit"
+                                        variant="tertiary"
+                                        href={`/app/products/${product.id.split("/").pop()}`}
+                                        accessibilityLabel={`Edit ${product.title}`}
+                                        interestFor={`edit-tooltip-${product.id.split("/").pop()}`}
+                                    />
+                                    <s-tooltip id={`edit-tooltip-${product.id.split("/").pop()}`}>
+                                        <s-text>{c.edit}</s-text>
+                                    </s-tooltip>
                                 </s-table-cell>
                             </s-table-row>
                         ))}

@@ -1,7 +1,8 @@
 import { useLoaderData, useFetcher } from "react-router";
 import { useEffect, useState } from "react";
 import { authenticate } from "../shopify.server";
-import { format, useLanguage } from "../context/LanguageContext";
+import { useLanguage } from "../context/LanguageContext";
+import { format } from "../context/languageData";
 //read fetch
 export const loader = async ({ request }) => {
     //test 
@@ -133,7 +134,7 @@ export default function Collections() {
                     <s-table-header-row>
                         <s-table-header listSlot="primary">{t.titleColumn}</s-table-header>
                         <s-table-header format="numeric">{t.productsColumn}</s-table-header>
-                        <s-table-header></s-table-header>
+                        <s-table-header>{c.action}</s-table-header>
                     </s-table-header-row>
                     <s-table-body>
                         {filteredCollections.map((collection) => {
@@ -171,7 +172,7 @@ export default function Collections() {
                                     </s-table-cell>
                                     <s-table-cell>{collection.productsCount?.count ?? 0}</s-table-cell>
                                     <s-table-cell>
-                                        <s-button icon="menu-vertical" variant="tertiary" accessibilityLabel="More actions" commandFor={menuId} />
+                                        <s-button icon="menu-horizontal" variant="tertiary" accessibilityLabel="More actions" commandFor={menuId} />
                                         <s-menu id={menuId} accessibilityLabel="Collection actions">
                                             <s-button
                                                 variant="tertiary"
