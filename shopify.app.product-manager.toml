@@ -16,6 +16,11 @@ scopes = "write_metaobject_definitions,write_metaobjects,write_products,read_loc
 [auth]
 redirect_urls = [ "https://example.com/api/auth" ]
 
+[app_proxy]
+url = "https://example.com/apps/gwp"
+subpath = "gwp"
+prefix = "apps"
+
 [build]
 
 automatically_update_urls_on_dev = true

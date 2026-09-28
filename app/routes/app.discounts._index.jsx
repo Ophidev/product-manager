@@ -16,16 +16,19 @@ export const loader = async ({ request }) => {
     console.log("Loader : fetched the data");
     const { admin } = await authenticate.admin(request);
 
-    const codeResponse = await admin.graphql(`
+    const discountsResponse = await admin.graphql(`
         #graphql
-        query ListDiscountCodes {
-            codeDiscountNodes(first: 50) {
+        query ListAllDiscounts {
+            discountNodes(first: 50) {
                 nodes {
                     id
-                    codeDiscount {
+                    discount {
+                        __typename
                         ... on DiscountCodeBasic {
                             title
                             status
+                            createdAt
+                            startsAt
                             codes(first: 1) {
                                 nodes { code }
                             }
@@ -45,6 +48,8 @@ export const loader = async ({ request }) => {
                         ... on DiscountCodeBxgy {
                             title
                             status
+                            createdAt
+                            startsAt
                             codes(first: 1) {
                                 nodes { code }
                             }
@@ -56,21 +61,36 @@ export const loader = async ({ request }) => {
                                 }
                             }
                         }
-                    }
-                }
-            }
-        }
-    `);
-    const automaticResponse = await admin.graphql(`
-        #graphql
-        query ListAutomaticDiscounts {
-            automaticDiscountNodes(first: 50) {
-                nodes {
-                    id
-                    automaticDiscount {
+                        ... on DiscountCodeApp {
+                            title
+                            status
+                            createdAt
+                            startsAt
+                            codes(first: 1) {
+                                nodes { code }
+                            }
+                            appDiscountType { appKey title }
+                        }
+                        ... on DiscountCodeFreeShipping {
+                            title
+                            status
+                            createdAt
+                            startsAt
+                            codes(first: 1) {
+                                nodes { code }
+                            }
+                        }
+                        ... on DiscountAutomaticBasic {
+                            title
+                            status
+                            createdAt
+                            startsAt
+                        }
                         ... on DiscountAutomaticBxgy {
                             title
                             status
+                            createdAt
+                            startsAt
                             customerGets {
                                 items {
                                     ... on DiscountProducts {
@@ -79,43 +99,80 @@ export const loader = async ({ request }) => {
                                 }
                             }
                         }
+                        ... on DiscountAutomaticApp {
+                            title
+                            status
+                            createdAt
+                            startsAt
+                            appDiscountType { appKey title }
+                        }
+                        ... on DiscountAutomaticFreeShipping {
+                            title
+                            status
+                            createdAt
+                            startsAt
+                        }
                     }
                 }
             }
         }
     `);
 
-    const codeData = (await codeResponse.json()).data;
-    const automaticData = (await automaticResponse.json()).data;
+    const discountsData = (await discountsResponse.json()).data;
 
-    const codeDiscounts = codeData.codeDiscountNodes.nodes
-        .filter((node) => node.codeDiscount?.title)
+    // eslint-disable-next-line no-undef
+    const isOurApp = (appDiscountType) => appDiscountType?.appKey === process.env.SHOPIFY_API_KEY;
+
+    const TYPE_LABELS = {
+        DiscountCodeBasic: "BASIC",
+        DiscountCodeBxgy: "BXGY_CODE",
+        DiscountCodeFreeShipping: "FREE_SHIPPING_CODE",
+        DiscountCodeApp: "GIFT_WITH_PURCHASE_CODE",
+        DiscountAutomaticBasic: "SALE_AUTOMATIC",
+        DiscountAutomaticBxgy: "BXGY_AUTOMATIC",
+        DiscountAutomaticFreeShipping: "FREE_SHIPPING_AUTOMATIC",
+        DiscountAutomaticApp: "GIFT_WITH_PURCHASE_AUTOMATIC",
+    };
+
+    const allDiscounts = discountsData.discountNodes.nodes
+        .filter((node) => node.discount?.title)
         .map((node) => {
-            const isBxgy = node.codeDiscount.customerGets?.items?.products != null;
+            const d = node.discount;
+            const isCode = d.__typename.includes("Code");
+            const isGiftWithPurchase = isOurApp(d.appDiscountType);
+            const isBxgy = d.__typename === "DiscountCodeBxgy" || d.__typename === "DiscountAutomaticBxgy";
             return {
                 id: node.id,
-                type: isBxgy ? "BXGY_CODE" : "BASIC",
-                code: node.codeDiscount.codes.nodes[0]?.code ?? node.codeDiscount.title,
-                status: node.codeDiscount.status,
-                percentage: node.codeDiscount.customerGets?.value?.percentage ?? null,
-                appliesTo: isBxgy
-                    ? (node.codeDiscount.customerGets.items.products.nodes ?? []).map((product) => product.title)
-                    : (node.codeDiscount.customerGets?.items?.collections?.nodes ?? []).map((collection) => collection.title),
+                type: isGiftWithPurchase
+                    ? (isCode ? "GIFT_WITH_PURCHASE_CODE" : "GIFT_WITH_PURCHASE_AUTOMATIC")
+                    : (TYPE_LABELS[d.__typename] ?? d.__typename),
+                method: isCode ? "CODE" : "AUTOMATIC",
+                code: isCode ? (d.codes?.nodes[0]?.code ?? d.title) : d.title,
+                status: d.status,
+                createdAt: d.createdAt,
+                startsAt: d.startsAt,
+                percentage: d.customerGets?.value?.percentage ?? null,
+                appliesTo: isGiftWithPurchase
+                    ? []
+                    : isBxgy
+                        ? (d.customerGets?.items?.products?.nodes ?? []).map((product) => product.title)
+                        : (d.customerGets?.items?.collections?.nodes ?? []).map((collection) => collection.title),
             };
         });
 
-    const automaticDiscounts = automaticData.automaticDiscountNodes.nodes
-        .filter((node) => node.automaticDiscount?.title)
-        .map((node) => ({
-            id: node.id,
-            type: "BXGY_AUTOMATIC",
-            code: node.automaticDiscount.title,
-            status: node.automaticDiscount.status,
-            percentage: null,
-            appliesTo: (node.automaticDiscount.customerGets?.items?.products?.nodes ?? []).map((product) => product.title),
-        }));
+    const automaticDiscounts = allDiscounts.filter((d) => d.method === "AUTOMATIC");
+    const recentlyCreated = [...allDiscounts]
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+        .slice(0, 5);
 
-    return { discounts: [...codeDiscounts, ...automaticDiscounts] };
+    return {
+        discounts: allDiscounts,
+        stats: {
+            activeAutomaticCount: automaticDiscounts.filter((d) => d.status === "ACTIVE").length,
+            scheduledAutomaticCount: automaticDiscounts.filter((d) => d.status === "SCHEDULED").length,
+        },
+        recentlyCreated,
+    };
 };
 //action --write/update 
 export const action = async ({ request }) => {
@@ -156,9 +213,34 @@ export const action = async ({ request }) => {
     const userErrors = results.flatMap((result) => result.userErrors ?? []);
     return { deleted: ids.length, userErrors };
 };
+const TYPE_LABEL_KEYS = {
+    BASIC: "type_sale_title",
+    SALE_AUTOMATIC: "type_sale_title",
+    BXGY_CODE: "type_buyXGetY_title",
+    BXGY_AUTOMATIC: "type_buyXGetY_title",
+    FREE_SHIPPING_CODE: "type_shipping_title",
+    FREE_SHIPPING_AUTOMATIC: "type_shipping_title",
+    GIFT_WITH_PURCHASE_CODE: "type_giftWithPurchase_title",
+    GIFT_WITH_PURCHASE_AUTOMATIC: "type_giftWithPurchase_title",
+};
+
+//stat tile mirroring the dashboard's "catalog overview" tiles
+function StatTile({ label, value, tone }) {
+    return (
+        <s-box padding="base" background="subdued" borderRadius="base">
+            <s-stack direction="block" gap="small-200">
+                <s-text color="subdued">{label}</s-text>
+                <s-heading>
+                    <s-text tone={tone}>{value}</s-text>
+                </s-heading>
+            </s-stack>
+        </s-box>
+    );
+}
+
 // UI
 export default function Discounts() {
-    const { discounts } = useLoaderData();
+    const { discounts, stats, recentlyCreated } = useLoaderData();
     const { t: { common: c, discounts: t } } = useLanguage();
     const deleteFetcher = useFetcher();
     const deleteResult = deleteFetcher.data;
@@ -246,6 +328,52 @@ export default function Discounts() {
                 </s-button>
             </s-modal>
 
+            <s-section heading={t.atAGlanceHeading}>
+                <s-grid gridTemplateColumns="repeat(2, 1fr)" gap="base">
+                    <StatTile label={t.activeAutomaticDiscounts} value={stats.activeAutomaticCount} tone="success" />
+                    <StatTile label={t.scheduledAutomaticDiscounts} value={stats.scheduledAutomaticCount} tone="caution" />
+                </s-grid>
+            </s-section>
+
+            <s-section heading={t.recentlyCreatedHeading} padding="2px">
+                {recentlyCreated.length === 0 ? (
+                    <s-box padding="base">
+                        <s-text color="subdued">{t.noDiscountsYet}</s-text>
+                    </s-box>
+                ) : (
+                    <s-table variant="auto">
+                        <s-table-header-row>
+                            <s-table-header listSlot="primary">{t.discountColumn}</s-table-header>
+                            <s-table-header>{t.typeColumn}</s-table-header>
+                            <s-table-header>{t.methodColumn}</s-table-header>
+                            <s-table-header>{c.status}</s-table-header>
+                            <s-table-header>{t.startDateColumn}</s-table-header>
+                        </s-table-header-row>
+                        <s-table-body>
+                            {recentlyCreated.map((discount) => (
+                                <s-table-row key={discount.id}>
+                                    <s-table-cell>
+                                        <s-link href={`/app/${discount.type === "BASIC" ? "discounts" : "gift-with-purchase"}/${discount.id.split("/").pop()}`}>
+                                            {discount.code}
+                                        </s-link>
+                                    </s-table-cell>
+                                    <s-table-cell>{t[TYPE_LABEL_KEYS[discount.type]] ?? discount.type}</s-table-cell>
+                                    <s-table-cell>{discount.method === "AUTOMATIC" ? t.methodAutomatic : t.methodCode}</s-table-cell>
+                                    <s-table-cell>
+                                        <s-badge tone={discount.status === "ACTIVE" ? "success" : discount.status === "SCHEDULED" ? "caution" : "neutral"}>
+                                            {discount.status === "ACTIVE" ? c.active : discount.status === "SCHEDULED" ? t.scheduled : discount.status === "DRAFT" ? c.draft : discount.status}
+                                        </s-badge>
+                                    </s-table-cell>
+                                    <s-table-cell>
+                                        {discount.startsAt ? new Date(discount.startsAt).toLocaleDateString() : "-"}
+                                    </s-table-cell>
+                                </s-table-row>
+                            ))}
+                        </s-table-body>
+                    </s-table>
+                )}
+            </s-section>
+
             <s-section padding="none" accessibilityLabel="Discounts table section">
                 <s-table>
                     <s-grid slot="filters" gap="small-200" gridTemplateColumns="1fr">
@@ -276,7 +404,7 @@ export default function Discounts() {
                                     <s-table-cell>
                                         <s-grid gridTemplateColumns="1fr auto auto" gap="small" alignItems="center">
                                             <s-text>{discount.code}</s-text>
-                                            {discount.type !== "BXGY_AUTOMATIC" && (
+                                            {discount.method !== "AUTOMATIC" && (
                                                 <>
                                                     <s-button
                                                         icon="clipboard"
@@ -304,7 +432,7 @@ export default function Discounts() {
                                                     </s-tooltip>
                                                 </>
                                             )}
-                                            {(discount.type === "BXGY_CODE" || discount.type === "BXGY_AUTOMATIC") && (
+                                            {(discount.type === "BXGY_CODE" || discount.type === "BXGY_AUTOMATIC" || discount.type === "GIFT_WITH_PURCHASE_CODE" || discount.type === "GIFT_WITH_PURCHASE_AUTOMATIC") && (
                                                 <>
                                                     <s-button
                                                         icon="edit"
