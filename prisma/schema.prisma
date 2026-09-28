@@ -32,3 +32,14 @@ model Session {
   refreshToken        String?
   refreshTokenExpires DateTime?
 }
+
+model GiftWithPurchase {
+  id                String   @id @default(cuid())
+  shop              String
+  shopifyDiscountId String
+  discountMethod    String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([shop, shopifyDiscountId])
+}

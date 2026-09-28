@@ -1,0 +1,21 @@
+api_version = "2026-07"
+
+[[extensions]]
+name = "t:name"
+handle = "gift-with-purchase-function"
+type = "function"
+uid = "ceb5ca56-1d59-20d6-6026-3e9f1ce4fab8501e4281"
+description = "t:description"
+
+  [[extensions.targeting]]
+  target = "purchase.product-discount.run"
+  input_query = "src/run.graphql"
+  export = "run"
+
+  [extensions.build]
+  command = ""
+  path = "dist/function.wasm"
+
+  [extensions.ui.paths]
+  create = "/app/gift-with-purchase/new"
+  details = "/app/gift-with-purchase/:id"
